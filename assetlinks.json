@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.vercel.sofyan_lilac.twa",
+    "sha256_cert_fingerprints": ["EE:FC:44:24:5D:DA:27:37:3A:A0:0C:1B:C7:02:A1:A4:7F:14:E7:3A:1D:DD:0D:9B:4C:BC:BF:15:35:F8:45:5C"]
+  }
+}]

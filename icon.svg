@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="120" fill="#fdfbf7"/>
+  <circle cx="256" cy="256" r="180" fill="#818cf8" fill-opacity="0.1"/>
+  <path d="M256 120V392" stroke="#4b5563" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="256" cy="180" r="60" fill="#fca5a5"/> <!-- Pink Dango -->
+  <circle cx="256" cy="280" r="60" fill="#ffffff"/> <!-- White Dango -->
+  <circle cx="256" cy="380" r="60" fill="#86efac"/> <!-- Green Dango -->
+  <text x="256" y="270" text-anchor="middle" font-family="serif" font-weight="bold" font-size="40" fill="#1f2937">N</text>
+</svg>

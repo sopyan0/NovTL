@@ -1,0 +1,107 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Reset & Base Styles */
+@layer base {
+  :root {
+    /* REVISI: Menggunakan Pure White & Cool Gray (Bukan lagi Kuning/Natural) */
+    --color-paper: 255 255 255; /* #FFFFFF */
+    --color-charcoal: 17 24 39; /* #111827 (Gray 900) */
+    --color-card: 255 255 255; /* #FFFFFF */
+    --color-subtle: 107 114 128; /* #6B7280 (Gray 500) */
+    --color-border: 229 231 235; /* #E5E7EB (Gray 200) */
+  }
+
+  /* Dark Mode Overrides */
+  .dark {
+    --color-paper: 5 5 5; /* #050505 (Deep Black - OLED Friendly) */
+    --color-charcoal: 249 250 251; /* #F9FAFB (Gray 50) */
+    --color-card: 23 23 23; /* #171717 (Neutral 900) */
+    --color-subtle: 156 163 175; /* #9CA3AF (Gray 400) */
+    --color-border: 38 38 38; /* #262626 (Neutral 800) */
+  }
+
+  body { 
+    font-family: 'Outfit', sans-serif; 
+    -webkit-tap-highlight-color: transparent; 
+    @apply bg-paper text-charcoal overflow-x-hidden transition-colors duration-300;
+  }
+  
+  h1, h2, h3, h4, h5, h6 { font-family: 'Playfair Display', serif; }
+}
+
+/* Utility Classes */
+@layer components {
+  .glass { 
+    background: rgba(255, 255, 255, 0.95); 
+    backdrop-filter: blur(8px); 
+    border: 1px solid rgba(229, 231, 235, 0.8); 
+  }
+  
+  /* Dark mode glass override */
+  .dark .glass {
+    background: rgba(23, 23, 23, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-card { 
+    background: rgba(255, 255, 255, 0.8); 
+    backdrop-filter: blur(12px); 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); 
+    border: 1px solid rgba(229, 231, 235, 0.6); 
+  }
+
+  .dark .glass-card {
+    background: rgba(23, 23, 23, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Custom Utilities */
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+  
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #404040; }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #525252; }
+
+  .no-select { user-select: none; -webkit-user-select: none; }
+}
+
+/* Initial Loader (Splash Screen) */
+#initial-loader {
+  position: fixed;
+  inset: 0;
+  background-color: #FFFFFF;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s ease-out;
+}
+.dango-loader {
+  font-size: 3rem;
+  animation: bounce 1.5s infinite;
+}
+.loading-text {
+  margin-top: 1rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.2em;
+  color: #111827;
+  opacity: 0.7;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.loaded #initial-loader {
+  opacity: 0;
+  pointer-events: none;
+}

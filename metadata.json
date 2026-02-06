@@ -1,0 +1,7 @@
+{
+  "name": "Copy of NovTL Studio",
+  "description": "Professional AI-based novel translator platform featuring glossary management, local backup, and EPUB generator.",
+  "requestFramePermissions": [
+    "clipboard-read"
+  ]
+}

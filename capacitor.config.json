@@ -1,0 +1,19 @@
+
+{
+  "appId": "com.novtl.studio",
+  "appName": "NovTL Studio",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Filesystem": {
+      "ios": {
+        "scheme": "public"
+      },
+      "android": {
+        "scheme": "public"
+      }
+    }
+  }
+}
