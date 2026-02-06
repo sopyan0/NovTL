@@ -1,11 +1,9 @@
 
 /**
- * Simple IndexedDB Wrapper for NovTL
- * Handles offline storage for projects, chapters, and glossaries.
+ * IndexedDB Wrapper for NovTL (Cache Layer)
  */
-
-const DB_NAME = 'NovTL_Offline_DB';
-const DB_VERSION = 2; // Naikkan versi untuk migrasi store baru
+const DB_NAME = 'NovTL_Hybrid_Cache';
+const DB_VERSION = 3;
 
 export const initIDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -14,26 +12,15 @@ export const initIDB = (): Promise<IDBDatabase> => {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       
-      if (!db.objectStoreNames.contains('projects')) {
-        db.createObjectStore('projects', { keyPath: 'id' });
+      // Store untuk Cache File (Mirroring Filesystem)
+      if (!db.objectStoreNames.contains('fs_cache')) {
+        db.createObjectStore('fs_cache', { keyPath: 'id' });
       }
-      if (!db.objectStoreNames.contains('chapters')) {
-        db.createObjectStore('chapters', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('glossaries')) {
-        db.createObjectStore('glossaries', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('chat_history')) {
-        db.createObjectStore('chat_history', { keyPath: 'id' });
-      }
-      // NEW: Store untuk status aplikasi (scroll, active EPUB metadata)
-      if (!db.objectStoreNames.contains('app_state')) {
-        db.createObjectStore('app_state', { keyPath: 'id' });
-      }
-      // NEW: Store khusus binary file EPUB agar tidak hilang saat navigasi
-      if (!db.objectStoreNames.contains('epub_files')) {
-        db.createObjectStore('epub_files', { keyPath: 'id' });
-      }
+      // Store untuk data aplikasi lainnya
+      const stores = ['projects', 'chapters', 'chat_history', 'app_state', 'epub_files'];
+      stores.forEach(s => {
+        if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' });
+      });
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -47,17 +34,6 @@ export const putItem = async (storeName: string, item: any) => {
     const transaction = db.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
     const request = store.put(item);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-};
-
-export const getAllItems = async (storeName: string): Promise<any[]> => {
-  const db = await initIDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, 'readonly');
-    const store = transaction.objectStore(storeName);
-    const request = store.getAll();
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -85,13 +61,14 @@ export const deleteItem = async (storeName: string, id: string) => {
   });
 };
 
-export const clearStore = async (storeName: string) => {
+export const clearCacheOnly = async () => {
   const db = await initIDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    const request = store.clear();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+  const stores = ['fs_cache', 'chapters', 'chat_history'];
+  const promises = stores.map(s => {
+    return new Promise((resolve) => {
+        const tx = db.transaction(s, 'readwrite');
+        tx.objectStore(s).clear().onsuccess = () => resolve(true);
+    });
   });
+  await Promise.all(promises);
 };

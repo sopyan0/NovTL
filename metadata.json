@@ -1,7 +1,11 @@
 {
-  "name": "Copy of NovTL Studio",
-  "description": "Professional AI-based novel translator platform featuring glossary management, local backup, and EPUB generator.",
+  "name": "NovTL Studio",
+  "description": "Professional AI-based novel translator platform with Hybrid Storage.",
   "requestFramePermissions": [
-    "clipboard-read"
+    "clipboard-read",
+    "camera"
+  ],
+  "permissions": [
+    "filesystem"
   ]
 }
