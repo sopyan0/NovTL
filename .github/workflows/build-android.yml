@@ -18,10 +18,8 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: 20
-        # Cache dimatikan sementara
 
     - name: Install Dependencies
-      # Menggunakan npm install biasa
       run: npm install
 
     - name: Build React App
@@ -29,8 +27,14 @@ jobs:
 
     - name: Initialize Capacitor Android
       run: |
-        npx cap add android
+        npx cap add android || true
         npx cap sync android
+        npx cap update android
+
+    - name: Generate App Icons
+      run: |
+        # Menginstall @capacitor/assets on-the-fly dan generate icon untuk Android
+        npx -y @capacitor/assets generate --icon icon-512.png --android
 
     - name: Setup Java JDK
       uses: actions/setup-java@v4
