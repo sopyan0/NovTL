@@ -33,8 +33,12 @@ jobs:
 
     - name: Generate App Icons
       run: |
-        # Menginstall @capacitor/assets on-the-fly dan generate icon untuk Android
-        npx -y @capacitor/assets generate --icon icon-512.png --android
+        # Buat folder assets yang dibutuhkan @capacitor/assets secara manual
+        mkdir -p assets
+        # Copy file icon Anda (icon-512.png) menjadi assets/icon.png agar terdeteksi otomatis
+        cp icon-512.png assets/icon.png
+        # Jalankan generate tanpa flag --icon (karena sudah otomatis baca dari folder assets)
+        npx -y @capacitor/assets generate --android
 
     - name: Setup Java JDK
       uses: actions/setup-java@v4
