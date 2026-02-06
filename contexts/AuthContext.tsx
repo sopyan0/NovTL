@@ -29,7 +29,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Langsung masuk sebagai user lokal
+        // Langsung masuk sebagai user lokal (Offline First)
         const timer = setTimeout(() => {
             setUser(LOCAL_USER);
             setIsLoading(false);

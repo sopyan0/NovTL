@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { AppSettings, GlossaryItem, NovelProject, SavedTranslation } from '../types';
+import { AppSettings, GlossaryItem, NovelProject } from '../types';
 import { LLM_PROVIDERS, PROVIDER_MODELS, DEFAULT_MODELS } from '../constants'; 
 import ConfirmDialog from './ConfirmDialog'; 
 import { useSettings } from '../contexts/SettingsContext';
@@ -124,7 +124,7 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleClearCache = async () => {
-      if(confirm("Hapus cache database? Ini akan mempercepat aplikasi jika terasa berat, tetapi loading pertama tiap bab akan sedikit lebih lambat karena membaca dari storage. File asli Anda AMAN.")) {
+      if(confirm("Hapus cache database? Ini akan mempercepat aplikasi jika terasa berat. File asli Anda di folder Documents TETAP AMAN.")) {
           setIsCleaningCache(true);
           await clearCacheOnly();
           setIsCleaningCache(false);
@@ -133,7 +133,7 @@ const SettingsPage: React.FC = () => {
   }
 
   const handleResetApp = async () => {
-      if(confirm("PERINGATAN: Ini akan menghapus SEMUA data termasuk file di Documents/NovTL. Lanjutkan?")) {
+      if(confirm("PERINGATAN: Ini akan menghapus seluruh data proyek. Lanjutkan?")) {
           await wipeAllLocalData();
           window.location.reload();
       }
@@ -181,9 +181,9 @@ const SettingsPage: React.FC = () => {
               for (const t of data.translations) {
                   await saveTranslationToDB({ ...t, projectId: newProjectId });
               }
-              alert(t('settings.importSuccess'));
+              alert("Data berhasil dipulihkan!");
           } catch (err) {
-              alert(t('settings.importError'));
+              alert("Gagal memproses file backup.");
           } finally {
               if (fileInputRef.current) fileInputRef.current.value = '';
           }
@@ -205,9 +205,9 @@ const SettingsPage: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10 mb-6">
             <div className="w-full">
                 <h2 className="text-xl md:text-2xl font-serif font-bold flex items-center gap-2 text-charcoal">
-                   📂 Manajemen Proyek
+                   📂 Proyek Novel
                 </h2>
-                <p className="text-subtle text-xs mt-1 tracking-wide">Pilih novel yang sedang dikerjakan.</p>
+                <p className="text-subtle text-xs mt-1 tracking-wide">Kelola novel yang sedang Anda kerjakan.</p>
             </div>
             
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -255,23 +255,23 @@ const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* DATA MANAGEMENT (Optimized) */}
+      {/* DATA MANAGEMENT */}
       <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-charcoal">
-         <h2 className="text-xl font-serif font-bold text-charcoal">💾 Penyimpanan & Data</h2>
+         <h2 className="text-xl font-serif font-bold text-charcoal">💾 Penyimpanan Lokal</h2>
          
          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <button onClick={handleExportProject} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
-                     <p className="font-bold text-charcoal">Backup (.json)</p>
-                     <p className="text-xs text-subtle">Simpan seluruh data ke file.</p>
+                     <p className="font-bold text-charcoal">Ekspor Backup (.json)</p>
+                     <p className="text-xs text-subtle">Simpan data ke file untuk dipindah.</p>
                  </div>
                  <span className="text-2xl">📤</span>
              </button>
 
              <button onClick={handleImportClick} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
-                     <p className="font-bold text-charcoal">Restore (.json)</p>
-                     <p className="text-xs text-subtle">Pulihkan data dari file.</p>
+                     <p className="font-bold text-charcoal">Impor Backup (.json)</p>
+                     <p className="text-xs text-subtle">Pulihkan data dari file eksternal.</p>
                  </div>
                  <span className="text-2xl">📥</span>
              </button>
@@ -280,8 +280,8 @@ const SettingsPage: React.FC = () => {
 
          <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-4">
              <div>
-                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Aplikasi Lambat?</p>
-                <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">Hapus cache database untuk membersihkan memori aplikasi.</p>
+                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Optimasi Memori?</p>
+                <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">Hapus cache database (IndexedDB) untuk melegakan memori aplikasi.</p>
              </div>
              <button 
                 onClick={handleClearCache} 
@@ -294,9 +294,9 @@ const SettingsPage: React.FC = () => {
 
          <div className="pt-4 border-t border-border flex justify-between items-center">
              <button onClick={handleResetApp} className="text-[10px] font-bold text-red-400 hover:text-red-600 underline">
-                 RESET TOTAL (Hapus Semua File & Data)
+                 HAPUS SEMUA DATA & RESET APLIKASI
              </button>
-             <span className="text-[10px] text-subtle font-mono">v3.1.0-native</span>
+             <span className="text-[10px] text-subtle font-mono">v3.2.0-hybrid</span>
          </div>
       </section>
 
@@ -305,7 +305,7 @@ const SettingsPage: React.FC = () => {
         <h2 className="text-xl font-serif font-bold text-charcoal pb-2 border-b border-gray-100">⚙️ Konfigurasi AI</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">Provider</label>
+                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">Penyedia AI</label>
                 <select value={settings.activeProvider} onChange={(e) => updateGlobalSetting('activeProvider', e.target.value)} className="w-full p-4 rounded-2xl bg-charcoal text-paper text-sm font-bold outline-none appearance-none">
                     {LLM_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
@@ -319,7 +319,7 @@ const SettingsPage: React.FC = () => {
             <div className="md:col-span-2 space-y-2">
                 <div className="flex justify-between items-end mb-1">
                     <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">API Key ({settings.activeProvider})</label>
-                    <a href={API_KEY_LINKS[settings.activeProvider] || '#'} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600 hover:underline">Dapatkan Key ↗</a>
+                    <a href={API_KEY_LINKS[settings.activeProvider] || '#'} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600 hover:underline">Ambil Key ↗</a>
                 </div>
                 <input type="password" placeholder="Tempel API Key di sini..." value={settings.apiKeys[settings.activeProvider] || ''} onChange={(e) => updateApiKey(settings.activeProvider, e.target.value)} className="w-full p-4 rounded-2xl bg-card border-2 border-transparent focus:border-accent outline-none text-sm font-mono shadow-inner-light" />
             </div>
@@ -331,14 +331,14 @@ const SettingsPage: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-4">
             <div>
                 <h2 className="text-xl font-serif font-bold text-charcoal">📖 Glosarium</h2>
-                <p className="text-subtle text-xs mt-1">Glosarium akan digunakan secara konsisten oleh AI.</p>
+                <p className="text-subtle text-xs mt-1">Glosarium akan digunakan secara konsisten oleh AI saat menerjemahkan.</p>
             </div>
             {selectedIds.size > 0 && (
                 <button onClick={() => setIsConfirmBulkDeleteOpen(true)} className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg animate-in fade-in transition-all">Hapus Terpilih ({selectedIds.size})</button>
             )}
         </div>
         <div className="flex flex-col sm:flex-row gap-3 bg-paper/50 p-3 rounded-2xl border border-border">
-          <input type="text" placeholder="Asli" className="flex-grow p-3 rounded-xl bg-card border border-transparent text-sm outline-none" value={newWord} onChange={(e) => setNewWord(e.target.value)} />
+          <input type="text" placeholder="Kata Asli" className="flex-grow p-3 rounded-xl bg-card border border-transparent text-sm outline-none" value={newWord} onChange={(e) => setNewWord(e.target.value)} />
           <input type="text" placeholder="Terjemahan" className="flex-grow p-3 rounded-xl bg-card border border-transparent text-sm outline-none" value={newTrans} onChange={(e) => setNewTrans(e.target.value)} />
           <button onClick={() => { if(newWord && newTrans) { addGlossaryItem(newWord, newTrans); setNewWord(''); setNewTrans(''); }}} className="bg-charcoal text-paper px-6 py-3 rounded-xl font-bold shadow-md">Tambah</button>
         </div>

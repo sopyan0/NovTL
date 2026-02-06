@@ -1,1 +1,0 @@
-// File deleted: Supabase is no longer used in Local/Native mode.

@@ -1,11 +1,9 @@
 {
   "name": "NovTL Studio",
   "description": "Professional AI-based novel translator platform with Hybrid Storage.",
-  "requestFramePermissions": [
-    "clipboard-read",
-    "camera"
-  ],
+  "requestFramePermissions": [],
   "permissions": [
-    "filesystem"
+    "filesystem",
+    "storage"
   ]
 }

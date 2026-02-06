@@ -36,13 +36,13 @@ Aplikasi ini membutuhkan "Kunci API" untuk bekerja. Kami merekomendasikan **Goog
 
 ---
 
-## 📂 Lokasi Data Anda
+## 📂 Lokasi Data Anda (Privasi 100%)
 
-Privasi adalah prioritas kami. Data Anda **TIDAK** disimpan di server kami. Semua file ada di perangkat Anda:
+Data Anda **TIDAK** disimpan di server kami. Semua file ada di perangkat Anda:
 - **Windows**: `C:\Users\[User]\Documents\NovTL`
-- **Android**: `/Documents/NovTL`
+- **Android**: `/Documents/NovTL` (Cek melalui File Manager)
 
-Anda bisa membackup folder tersebut secara manual atau menggunakan fitur **Backup (.json)** di menu Setelan untuk memindahkan data antar perangkat.
+Anda bisa membackup folder tersebut secara manual ke flashdisk atau cloud pribadi Anda.
 
 ---
 

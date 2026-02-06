@@ -13,6 +13,12 @@ if (!fs.existsSync(BASE_DIR)) {
 }
 
 function createWindow() {
+    // Determine icon path based on environment
+    // In production (asar), __dirname is inside the archive. The icon is unpacked or at root.
+    const iconPath = app.isPackaged 
+        ? path.join(process.resourcesPath, 'app.asar', 'icon-512.png') // Try inside asar first if packed
+        : path.join(__dirname, '../icon-512.png'); // Dev mode
+
     const mainWindow = new BrowserWindow({
         width: 1280,
         height: 800,
@@ -22,7 +28,8 @@ function createWindow() {
             contextIsolation: true,
             sandbox: false // Diperlukan untuk akses file system via preload
         },
-        icon: path.join(__dirname, '../icon-512.png')
+        icon: iconPath,
+        autoHideMenuBar: true // Menyembunyikan menu bar default electron yang kurang estetis
     });
 
     // Load dari dist saat production, atau localhost saat dev

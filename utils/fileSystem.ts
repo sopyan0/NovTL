@@ -22,16 +22,16 @@ const isCapacitorNative = () => {
 
 /**
  * HYBRID STORAGE ENGINE
- * Menulis ke File Fisik (Permanen) DAN IndexedDB (Cache Cepat).
+ * Kecepatan IndexedDB (Cache) + Keamanan File Fisik (Permanent).
  */
 
 export const fsWrite = async (filename: string, content: string | object): Promise<void> => {
     const stringData = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
 
-    // 1. Tulis ke Cache (IndexedDB) - Selalu dilakukan untuk kecepatan UI
+    // 1. Tulis ke Cache (IndexedDB) - Supaya UI responsif saat ribuan bab dibuka
     await putItem('fs_cache', { id: filename, content: stringData });
 
-    // 2. Tulis ke File Fisik (Permanen)
+    // 2. Tulis ke File Fisik (Permanen di Hardisk / Internal Storage)
     if (isElectron()) {
         await window.novtlAPI!.write(filename, stringData);
     } else if (isCapacitorNative()) {
@@ -44,7 +44,7 @@ export const fsWrite = async (filename: string, content: string | object): Promi
                 recursive: true
             });
         } catch (e) {
-            console.error("Android Write Error:", e);
+            console.error("Android File System Error:", e);
         }
     }
 };
@@ -52,12 +52,12 @@ export const fsWrite = async (filename: string, content: string | object): Promi
 export const fsRead = async <T>(filename: string): Promise<T | null> => {
     let raw: string | null = null;
 
-    // A. Cek Cache (IndexedDB) - Prioritas Pertama
+    // A. Cek Cache (IndexedDB) dulu - Sangat Cepat
     const cached = await getItem('fs_cache', filename);
     if (cached) {
         raw = cached.content;
     } else {
-        // B. Jika Cache Kosong, Baca dari File Fisik
+        // B. Jika Cache kosong, baca dari File Fisik (Storage)
         if (isElectron()) {
             raw = await window.novtlAPI!.read(filename);
         } else if (isCapacitorNative()) {
@@ -73,7 +73,7 @@ export const fsRead = async <T>(filename: string): Promise<T | null> => {
             }
         }
         
-        // C. Jika Berhasil Baca File, Masukkan kembali ke Cache untuk loading berikutnya
+        // C. Simpan kembali ke Cache agar pembukaan berikutnya instan
         if (raw) {
             await putItem('fs_cache', { id: filename, content: raw });
         }
@@ -107,6 +107,7 @@ export const fsDelete = async (filename: string): Promise<void> => {
 export const initFileSystem = async () => {
     if (isCapacitorNative()) {
         try {
+            // Inisialisasi struktur folder di Android
             await Filesystem.mkdir({ path: 'NovTL', directory: Directory.Documents, recursive: true });
             await Filesystem.mkdir({ path: 'NovTL/chapters', directory: Directory.Documents, recursive: true });
         } catch (e) {}
