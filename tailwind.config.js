@@ -1,6 +1,6 @@
 
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
     "./index.html",
     "./*.{js,ts,jsx,tsx}", 
@@ -11,11 +11,10 @@ export default {
     "./utils/**/*.{js,ts,jsx,tsx}",
     "./constants/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class', // Enable class-based dark mode
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Menggunakan CSS Variables dengan format RGB untuk mendukung opacity modifier di Tailwind
         paper: 'rgb(var(--color-paper) / <alpha-value>)',
         charcoal: 'rgb(var(--color-charcoal) / <alpha-value>)',
         card: 'rgb(var(--color-card) / <alpha-value>)', 
