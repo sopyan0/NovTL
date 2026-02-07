@@ -19,6 +19,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { AuthProvider } from './contexts/AuthContext'; 
 import { AuthGuard } from './components/AuthGuard'; 
 import { initFileSystem } from './utils/fileSystem';
+import { dbService } from './services/DatabaseService';
 
 // Lazy Load Heavy Components
 const SavedTranslationsPage = React.lazy(() => import('./components/SavedTranslationsPage'));
@@ -53,9 +54,17 @@ const AppContent: React.FC = () => {
   const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
   const openChat = () => setIsChatOpen(true); 
 
-  // INIT FILE SYSTEM & PERMISSIONS ON MOUNT
+  // INIT SYSTEM SERVICES
   useEffect(() => {
-    initFileSystem().catch(err => console.error("FS Init Failed:", err));
+    const initServices = async () => {
+        try {
+            await initFileSystem();
+            await dbService.init();
+        } catch (err) {
+            console.error("System Init Failed:", err);
+        }
+    };
+    initServices();
   }, []);
 
   // Safe LocalStorage Access

@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('novtlAPI', {
     delete: (filename) => ipcRenderer.invoke('fs-delete', { filename }),
     getStoragePath: () => ipcRenderer.invoke('get-storage-path'),
     readClipboard: () => ipcRenderer.invoke('clipboard-read'),
+    saveToDownloads: (filename, base64Data) => ipcRenderer.invoke('save-to-downloads', { filename, base64Data }),
     platform: 'electron'
 });

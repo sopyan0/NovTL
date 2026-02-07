@@ -235,11 +235,11 @@ const SettingsPage: React.FC = () => {
                 {!isCreatingProject ? (
                     <button onClick={() => setIsCreatingProject(true)} className="bg-charcoal text-paper px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all whitespace-nowrap">+ Proyek Baru</button>
                 ) : (
-                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                        <input type="text" placeholder="Nama Proyek..." className="p-2.5 rounded-xl bg-card text-charcoal text-sm border-2 border-accent outline-none w-full" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} autoFocus />
+                    <div className="flex flex-col sm:flex-row gap-2 w-full">
+                        <input type="text" placeholder="Nama Proyek..." className="p-2.5 rounded-xl bg-card text-charcoal text-sm border-2 border-accent outline-none flex-grow min-w-0" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} autoFocus />
                         <div className="flex gap-2">
-                            <button onClick={handleCreateProject} className="bg-accent px-4 py-2 rounded-xl text-white text-xs font-bold flex-1 shadow-glow">OK</button>
-                            <button onClick={() => setIsCreatingProject(false)} className="bg-gray-200 text-charcoal px-4 py-2 rounded-xl text-xs font-bold flex-1">Batal</button>
+                            <button onClick={handleCreateProject} className="bg-accent px-4 py-2 rounded-xl text-white text-xs font-bold flex-1 sm:flex-none shadow-glow">OK</button>
+                            <button onClick={() => setIsCreatingProject(false)} className="bg-gray-200 text-charcoal px-4 py-2 rounded-xl text-xs font-bold flex-1 sm:flex-none">Batal</button>
                         </div>
                     </div>
                 )}
@@ -269,8 +269,8 @@ const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* GLOSSARY (REDESIGNED) */}
-      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 bg-charcoal/5 dark:bg-[#0a0a0a] border border-charcoal/10 dark:border-white/10">
+      {/* GLOSSARY (REDESIGNED & FIXED THEME) */}
+      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-accent">
         
         {/* Header Glosarium */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-border">
@@ -307,19 +307,19 @@ const SettingsPage: React.FC = () => {
                             placeholder="Cari kata..." 
                             value={glossarySearchTerm}
                             onChange={(e) => setGlossarySearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 bg-card border border-border rounded-xl text-xs outline-none focus:border-accent transition-colors"
+                            className="w-full px-3 py-2 bg-card border border-border rounded-xl text-xs outline-none focus:border-accent transition-colors text-charcoal"
                         />
                     </div>
                 )}
             </div>
         </div>
 
-        {/* Input Form Baru */}
-        <div className="bg-gray-900 dark:bg-black p-4 rounded-2xl border border-gray-800 flex flex-col md:flex-row items-center gap-3 shadow-inner">
+        {/* Input Form Baru (THEME AWARE) */}
+        <div className="bg-gray-100 dark:bg-black p-4 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col md:flex-row items-center gap-3 shadow-inner">
           <input 
             type="text" 
             placeholder="Istilah Asli" 
-            className="flex-grow w-full md:w-auto p-3 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm outline-none focus:border-gray-500 placeholder-gray-500 font-medium" 
+            className="flex-grow w-full md:w-auto p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-charcoal dark:text-white text-sm outline-none focus:border-accent placeholder-gray-500 font-medium" 
             value={newWord} 
             onChange={(e) => setNewWord(e.target.value)} 
           />
@@ -327,29 +327,29 @@ const SettingsPage: React.FC = () => {
           <input 
             type="text" 
             placeholder="Terjemahan" 
-            className="flex-grow w-full md:w-auto p-3 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm outline-none focus:border-gray-500 placeholder-gray-500 font-medium" 
+            className="flex-grow w-full md:w-auto p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-charcoal dark:text-white text-sm outline-none focus:border-accent placeholder-gray-500 font-medium" 
             value={newTrans} 
             onChange={(e) => setNewTrans(e.target.value)} 
           />
           <button 
             onClick={() => { if(newWord && newTrans) { addGlossaryItem(newWord, newTrans); setNewWord(''); setNewTrans(''); }}} 
-            className="w-full md:w-auto bg-white text-charcoal px-6 py-3 rounded-xl font-bold text-sm shadow-lg border-2 border-yellow-400 hover:bg-yellow-50 active:scale-95 transition-all whitespace-nowrap"
+            className="w-full md:w-auto bg-charcoal text-paper px-6 py-3 rounded-xl font-bold text-sm shadow-lg border-2 border-transparent hover:border-charcoal hover:bg-paper hover:text-charcoal active:scale-95 transition-all whitespace-nowrap"
           >
             + Tambah
           </button>
         </div>
 
-        {/* Daftar Kata (List Style Baru) */}
+        {/* Daftar Kata (List Style Baru - THEME AWARE) */}
         <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
             {filteredGlossary.map(item => (
-                <div key={item.id} className="group flex items-center gap-4 p-4 rounded-xl border bg-[#1e293b] border-[#334155] hover:border-gray-500 transition-all shadow-sm">
+                <div key={item.id} className="group flex items-center gap-4 p-4 rounded-xl border bg-white dark:bg-[#1e293b] border-gray-200 dark:border-[#334155] hover:border-accent transition-all shadow-sm">
                     {/* Checkbox */}
                     <div className="relative flex items-center">
                         <input 
                             type="checkbox" 
                             checked={selectedIds.has(item.id)} 
                             onChange={() => handleToggleSelect(item.id)} 
-                            className="peer w-5 h-5 cursor-pointer appearance-none rounded border-2 border-gray-500 checked:bg-blue-500 checked:border-blue-500 transition-all"
+                            className="peer w-5 h-5 cursor-pointer appearance-none rounded border-2 border-gray-400 dark:border-gray-500 checked:bg-accent checked:border-accent transition-all"
                         />
                         <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white left-[3px]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
@@ -357,10 +357,10 @@ const SettingsPage: React.FC = () => {
                     </div>
 
                     {/* Content */}
-                    <div className="flex-grow flex flex-col sm:flex-row sm:items-center gap-2 font-serif text-gray-200 text-base">
-                        <span className="font-medium tracking-wide opacity-80 select-all">{item.original}</span>
-                        <span className="text-gray-500 hidden sm:inline text-xs">➜</span>
-                        <span className="font-bold text-white bg-[#0f172a] px-3 py-1.5 rounded-lg border border-gray-700 shadow-sm select-all">
+                    <div className="flex-grow flex flex-col sm:flex-row sm:items-center gap-2 font-serif text-charcoal dark:text-gray-200 text-base">
+                        <span className="font-medium tracking-wide opacity-90 select-all">{item.original}</span>
+                        <span className="text-gray-400 hidden sm:inline text-xs">➜</span>
+                        <span className="font-bold text-charcoal dark:text-white bg-gray-100 dark:bg-[#0f172a] px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm select-all">
                             {item.translated}
                         </span>
                     </div>
@@ -368,7 +368,7 @@ const SettingsPage: React.FC = () => {
                     {/* Delete Icon */}
                     <button 
                         onClick={() => { setGlossaryItemToDeleteId(item.id); setIsConfirmDeleteGlossaryOpen(true); }} 
-                        className="text-gray-500 hover:text-red-400 p-2 rounded-lg hover:bg-white/5 transition-colors"
+                        className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                         title="Hapus item ini"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

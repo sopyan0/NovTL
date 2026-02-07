@@ -2,6 +2,7 @@
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { AppSettings, AssistantAction, EditorContextType, NovelProject, ChatMessage, AddGlossaryPayload, DeleteGlossaryPayload } from "../types"; 
 import { DEFAULT_MODELS } from "../constants";
+import { searchTranslations, getTranslationSummariesByProjectId } from "../utils/storage";
 
 // --- CONFIGURATION ---
 
@@ -49,15 +50,12 @@ const mapAIError = (error: any): string => {
 
 // --- HELPER: TOKENIZER ESTIMATION ---
 const estimateTokens = (text: string): number => {
-    // Estimasi kasar: 1 Token ~= 4 Karakter untuk Inggris, bisa lebih untuk bahasa lain.
-    // Kita pakai pembagi 3.5 untuk buffer aman.
     return Math.ceil(text.length / 3.5);
 };
 
 // --- HELPER: SMART CHUNKING & CONTEXT ---
 
 const splitTextByParagraphs = (text: string, maxTokens: number = 3000): string[] => {
-  // Konversi maxTokens ke estimasi karakter
   const maxChars = maxTokens * 3.5; 
   
   if (text.length <= maxChars) return [text];
@@ -69,7 +67,6 @@ const splitTextByParagraphs = (text: string, maxTokens: number = 3000): string[]
   for (const para of paragraphs) {
     const paraLen = para.length;
     
-    // Jika satu paragraf sendiri sudah melebihi batas, kita harus memecahnya (Hard Split)
     if (paraLen > maxChars) {
         if (currentChunk) {
             chunks.push(currentChunk.trim());
@@ -82,12 +79,10 @@ const splitTextByParagraphs = (text: string, maxTokens: number = 3000): string[]
             i += maxChars;
         }
     } 
-    // Jika menambah paragraf ini akan melebihi batas chunk
     else if ((currentChunk.length + paraLen) > maxChars) {
       chunks.push(currentChunk.trim());
       currentChunk = para + '\n';
     } 
-    // Tambahkan ke chunk saat ini
     else {
       currentChunk += para + '\n';
     }
@@ -108,7 +103,6 @@ const getSmartSnippet = (text: string, maxLen: number = 1000): string => {
            text.slice(-tailLen);
 };
 
-// --- HELPER: REGEX ESCAPE ---
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -118,8 +112,7 @@ const generateTextSimple = async (
     systemInstruction: string,
     config: AIClientConfig
 ): Promise<string> => {
-    // Safety Check
-    if (estimateTokens(prompt + systemInstruction) > 1000000) { // Limit absurd untuk flash
+    if (estimateTokens(prompt + systemInstruction) > 1000000) { 
          throw new Error("TokenLimit: Input text is way too huge even for Gemini Flash.");
     }
 
@@ -160,7 +153,8 @@ export const translateTextStream = async (
   project: NovelProject,
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
-  mode: 'standard' | 'high_quality' = 'standard'
+  mode: 'standard' | 'high_quality' = 'standard',
+  previousChapterContext?: string // NEW: Context from SQLite
 ): Promise<{ result: string, detectedLanguage: string | null }> => {
   const config = getAIClientConfig(settings);
   if (!config.apiKey) throw new Error(`API Key for ${config.provider} is missing.`);
@@ -200,9 +194,15 @@ export const translateTextStream = async (
                 const glossaryText = relevantGlossary.length > 0 
                     ? `\n[GLOSSARY - STRICTLY FOLLOW]\n${relevantGlossary.map(item => `${item.original}=${item.translated}`).join('\n')}\n`
                     : "";
-                const contextPrompt = index > 0 
-                    ? `\n[PREVIOUS CONTEXT]\n...${previousContextSource.slice(-300)}\n`
-                    : "";
+                
+                // CONTEXT LOGIC
+                let contextPrompt = "";
+                if (index === 0 && previousChapterContext) {
+                    // Inject previous chapter ending at the very start
+                    contextPrompt = `\n[STORY CONTEXT FROM PREVIOUS CHAPTER]\n(The story continues from here)...${previousChapterContext}\n`;
+                } else if (index > 0) {
+                    contextPrompt = `\n[PREVIOUS CHUNK CONTEXT]\n...${previousContextSource.slice(-300)}\n`;
+                }
                 
                 let promptToStream = "";
                 let systemInstruction = "";
@@ -354,7 +354,6 @@ export const chatWithAssistant = async (
   const config = getAIClientConfig(settings);
   if (!config.apiKey) throw new Error(`API Key for ${config.provider} not found.`);
 
-  // Glosarium Summary untuk prompt
   const glossary = project.glossary || [];
   const glossarySummary = glossary.length > 500
     ? glossary.slice(0, 500).map(g => `${g.original}(${g.translated})`).join(", ") + `... (+${glossary.length - 500} others)`
@@ -365,7 +364,6 @@ export const chatWithAssistant = async (
       if (forceFullContext) {
           contextInjection = `\n[FULL EDITOR CONTENT]\nSOURCE:\n${editorContext.sourceText}\n\nTRANSLATION:\n${editorContext.translatedText}\n`;
       } else {
-          // Tambahkan label yang JELAS bahwa ini dari Editor Aktif (Draft)
           contextInjection = `\n[EDITOR DRAFT - CURRENTLY EDITING]\nNOTE: Teks ini adalah Draft aktif yang sedang dikerjakan user di Editor. INI BUKAN DARI LIBRARY.\nSOURCE SNIPPET:\n${getSmartSnippet(editorContext.sourceText, 1000)}\n\nTRANSLATION SNIPPET:\n${getSmartSnippet(editorContext.translatedText, 1000)}\n`;
       }
   }
@@ -375,20 +373,20 @@ export const chatWithAssistant = async (
     KONTEKS GLOSARIUM SAAT INI: [${glossarySummary}]
     
     PERATURAN PENTING:
-    1. Anda bisa melihat teks di 'EDITOR DRAFT' (teks yang sedang diedit). Jika user bertanya tentang "chapter ini", jawablah berdasarkan draft tersebut, tapi jelaskan bahwa itu dari editor yang aktif.
-    2. CEK GLOSARIUM DI ATAS DULU sebelum menyarankan penambahan kata. Jika kata sudah ada (mirip), JANGAN panggil tool 'manage_glossary'.
-    3. HANYA panggil tool jika ada instruksi EKSPLESIT (tambah/hapus).
-    4. JANGAN panggil tool 'manage_glossary' untuk sapaan.`;
+    1. Anda bisa melihat teks di 'EDITOR DRAFT'.
+    2. Jika user bertanya "cari tentang X", gunakan tool 'read_historical_content'.
+    3. CEK GLOSARIUM DI ATAS DULU sebelum menyarankan penambahan kata.
+    4. HANYA panggil tool jika ada instruksi EKSPLESIT.`;
 
   const systemPromptEN = `You are Danggo🍡, a Novel Assistant.
     
     CURRENT GLOSSARY CONTEXT: [${glossarySummary}]
     
     IMPORTANT RULES:
-    1. You can see the 'EDITOR DRAFT' (text currently being edited). If user asks about "this chapter", answer based on that draft, but clarify it's from the active editor.
-    2. CHECK THE GLOSSARY ABOVE FIRST before suggesting additions. If a term already exists (even similar), DO NOT call 'manage_glossary'.
-    3. ONLY use tools if explicitly asked (add/delete).
-    4. DO NOT call 'manage_glossary' for greetings.`;
+    1. You can see the 'EDITOR DRAFT'.
+    2. If user asks to "search for X", use 'read_historical_content' tool.
+    3. CHECK THE GLOSSARY ABOVE FIRST before suggesting additions.
+    4. ONLY use tools if explicitly asked.`;
 
   const systemPrompt = language === 'en' ? systemPromptEN : systemPromptID;
 
@@ -416,7 +414,7 @@ export const chatWithAssistant = async (
       });
 
       const fc = response.functionCalls?.[0];
-      if (fc) return handleToolCall(fc.name, fc.args, language);
+      if (fc) return handleToolCall(fc.name, fc.args, settings.activeProjectId, language);
       return { type: 'NONE', message: response.text || (language === 'en' ? "Ready!" : "Siap membantu!") };
     } catch (err: any) {
         throw new Error(mapAIError(err));
@@ -425,7 +423,7 @@ export const chatWithAssistant = async (
   return { type: 'NONE', message: language === 'en' ? "Provider not supported for chat." : "Provider ini belum mendukung chat." };
 };
 
-function handleToolCall(name: string, args: any, language: 'en' | 'id'): AssistantAction {
+async function handleToolCall(name: string, args: any, projectId: string, language: 'en' | 'id'): Promise<AssistantAction> {
     if (name === 'read_full_editor_content') {
         const msg = language === 'en' ? "Reading full text..." : "Membaca teks lengkap...";
         return { type: 'READ_FULL_EDITOR_AND_REPROCESS', message: msg };
@@ -444,6 +442,7 @@ function handleToolCall(name: string, args: any, language: 'en' | 'id'): Assista
             return { type: 'DELETE_GLOSSARY', payload, message: language === 'en' ? "Confirm deletion?" : "Konfirmasi hapus kata?" };
         }
     }
+    // REVISI: Menggunakan SQL Search yang efisien
     if (name === 'read_historical_content') {
         return { type: 'READ_SAVED_TRANSLATION', payload: String(args.search_query || ''), message: language === 'en' ? "Searching library..." : "Mencari di koleksi..." };
     }

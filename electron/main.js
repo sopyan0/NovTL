@@ -4,7 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// FOLDER PENYIMPANAN UTAMA: Documents/NovTL
+// FOLDER PENYIMPANAN UTAMA (DATABASE & CACHE): Documents/NovTL
+// Kita tetap simpan database di Documents agar tidak terhapus user tidak sengaja saat bersih-bersih folder Download
 const BASE_DIR = path.join(app.getPath('documents'), 'NovTL');
 
 // Pastikan folder ada saat aplikasi dibuka
@@ -65,25 +66,16 @@ app.on('window-all-closed', function () {
 
 // --- API UNTUK RENDERER (REACT) ---
 
-// 1. Tulis File
+// 1. Tulis File (Internal App Data)
 ipcMain.handle('fs-write', async (event, { filename, content }) => {
     try {
-        // Security Check
-        if (!isSafePath(filename)) {
-            throw new Error("Access Denied: Invalid file path.");
-        }
-
+        if (!isSafePath(filename)) throw new Error("Access Denied: Invalid file path.");
         const filePath = path.join(BASE_DIR, filename);
         const dir = path.dirname(filePath);
-        
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(filePath, content, 'utf8');
         return { success: true };
     } catch (err) {
-        console.error("Write Error:", err);
         return { success: false, error: err.message };
     }
 });
@@ -91,28 +83,22 @@ ipcMain.handle('fs-write', async (event, { filename, content }) => {
 // 2. Baca File
 ipcMain.handle('fs-read', async (event, { filename }) => {
     try {
-        // Security Check
         if (!isSafePath(filename)) return null;
-
         const filePath = path.join(BASE_DIR, filename);
         if (!fs.existsSync(filePath)) return null;
-        const data = fs.readFileSync(filePath, 'utf8');
-        return data;
+        return fs.readFileSync(filePath, 'utf8');
     } catch (err) {
         return null;
     }
 });
 
-// 3. List File di Folder
+// 3. List File
 ipcMain.handle('fs-list', async (event, { folder }) => {
     try {
-        // Security Check
         if (!isSafePath(folder || '')) return [];
-
         const dirPath = path.join(BASE_DIR, folder || '');
         if (!fs.existsSync(dirPath)) return [];
-        const files = fs.readdirSync(dirPath);
-        return files;
+        return fs.readdirSync(dirPath);
     } catch (err) {
         return [];
     }
@@ -121,25 +107,41 @@ ipcMain.handle('fs-list', async (event, { folder }) => {
 // 4. Hapus File
 ipcMain.handle('fs-delete', async (event, { filename }) => {
     try {
-        // Security Check
-        if (!isSafePath(filename)) {
-            return { success: false, error: "Access Denied" };
-        }
-
+        if (!isSafePath(filename)) return { success: false, error: "Access Denied" };
         const filePath = path.join(BASE_DIR, filename);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         return { success: true };
     } catch (err) {
         return { success: false, error: err.message };
     }
 });
 
-// 5. Cek Path Penyimpanan (Untuk Debug)
+// 5. Cek Path
 ipcMain.handle('get-storage-path', () => BASE_DIR);
 
-// 6. CLIPBOARD (Native Electron)
-ipcMain.handle('clipboard-read', () => {
-    return clipboard.readText();
+// 6. CLIPBOARD
+ipcMain.handle('clipboard-read', () => clipboard.readText());
+
+// 7. EXPORT KE DOWNLOADS (NEW FEATURE)
+ipcMain.handle('save-to-downloads', async (event, { filename, base64Data }) => {
+    try {
+        const downloadFolder = app.getPath('downloads');
+        const exportFolder = path.join(downloadFolder, 'NovTL_Exports');
+        
+        if (!fs.existsSync(exportFolder)) {
+            fs.mkdirSync(exportFolder, { recursive: true });
+        }
+
+        const filePath = path.join(exportFolder, filename);
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        fs.writeFileSync(filePath, buffer);
+        
+        // Buka folder setelah selesai (opsional, agar user tau filenya dimana)
+        shell.showItemInFolder(filePath);
+        
+        return { success: true, path: filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
 });

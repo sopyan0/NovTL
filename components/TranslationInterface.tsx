@@ -12,7 +12,7 @@ import { Clipboard } from '@capacitor/clipboard';
 import { SavedTranslation, EpubChapter } from '../types'; 
 import { translateTextStream, hasValidApiKey } from '../services/llmService';
 import { LANGUAGES, DEFAULT_SETTINGS } from '../constants';
-import { saveTranslationToDB, countTranslationsByProjectId } from '../utils/storage';
+import { saveTranslationToDB, countTranslationsByProjectId, getPreviousChapterContext } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
 import { useEditor } from '../contexts/EditorContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -73,11 +73,7 @@ const TranslationToolbar: React.FC<{
     </div>
 
     <div className="flex gap-2 w-full md:w-auto justify-end items-center">
-        {/* Save Status Indicator */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-xl">
-             <div className={`w-2 h-2 rounded-full ${saveStatus === 'saving' ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
-             <span className="text-[10px] font-bold text-subtle uppercase tracking-wider">{saveStatus === 'saving' ? 'Saving...' : 'Saved'}</span>
-        </div>
+        {/* Save Status Removed as requested */}
 
         <select value={mode} onChange={(e) => onModeChange(e.target.value as any)} className={`appearance-none pl-3 pr-8 py-2 rounded-2xl text-xs font-bold border cursor-pointer outline-none transition-all ${mode === 'high_quality' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 border-indigo-100 dark:border-indigo-800 shadow-sm' : 'bg-card text-subtle border-border hover:border-gray-300 dark:hover:border-gray-600'}`}>
             <option value="standard">⚡ Standard</option>
@@ -139,7 +135,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   
   // Virtuoso Refs
   const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const translationContainerRef = useRef<HTMLDivElement>(null);
   
   const hasApiKey = hasValidApiKey(settings);
   const glossaryCount = activeProject.glossary.length;
@@ -223,18 +218,17 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   };
 
   const handleClearSource = async () => {
-      if(confirm("Apakah Anda yakin ingin menghapus semua teks di editor? Tindakan ini tidak dapat dibatalkan.")) {
-        setSourceText('');
-        setTranslatedText('');
-        outputBufferRef.current = '';
-        setActiveChapterId(null);
-        localStorage.removeItem('editor_scroll_index');
-        
-        await deleteItem('app_state', 'editor_source_content');
-        await deleteItem('app_state', 'editor_target_content');
+      // FIX: Langsung hapus tanpa konfirmasi yang mengganggu
+      setSourceText('');
+      setTranslatedText('');
+      outputBufferRef.current = '';
+      setActiveChapterId(null);
+      localStorage.removeItem('editor_scroll_index');
+      
+      await deleteItem('app_state', 'editor_source_content');
+      await deleteItem('app_state', 'editor_target_content');
 
-        if (isLoading) handleStop();
-      }
+      if (isLoading) handleStop();
   };
 
   const handlePasteSource = async () => {
@@ -383,7 +377,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     setTranslatedText(''); 
     outputBufferRef.current = '';
     abortControllerRef.current = new AbortController();
+
     try {
+      // FETCH CONTEXT FROM SQLITE (PREVIOUS CHAPTER)
+      // Ini memastikan AI tahu konteks bab sebelumnya untuk kontinuitas cerita
+      const previousChapterContext = await getPreviousChapterContext(activeProject.id);
+
       await translateTextStream(
           sourceText, settings, activeProject, 
           (chunk) => {
@@ -395,7 +394,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
               }
           },
           abortControllerRef.current.signal,
-          settings.translationMode || 'standard'
+          settings.translationMode || 'standard',
+          previousChapterContext
       );
       setTranslatedText(outputBufferRef.current);
     } catch (err: any) {
@@ -413,7 +413,9 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     const newTranslation: SavedTranslation = {
       id: generateId(),
       projectId: activeProject.id,
-      name: `Chapter ${count + 1}`,
+      name: activeChapterId 
+        ? (epubChapters.find(c => c.id === activeChapterId)?.title || `Chapter ${count + 1}`) 
+        : `Chapter ${count + 1}`,
       translatedText: translatedText,
       timestamp: new Date().toISOString(),
     };
@@ -525,9 +527,9 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       />
 
       {showApiKeyInput && (
-        <div className="glass p-6 rounded-3xl animate-in slide-in-from-top-2 shadow-soft border-l-4 border-accent flex gap-3">
-            <input type="password" placeholder={t('editor.apiKeyPlaceholder')} className="flex-grow p-4 rounded-2xl bg-paper/80 border border-border outline-none text-sm transition-all text-charcoal" value={tempApiKey} onChange={(e) => setTempApiKey(e.target.value)} />
-            <button onClick={() => { updateSettings(prev => ({...prev, apiKeys: {...prev.apiKeys, [settings.activeProvider]: tempApiKey}})); setShowApiKeyInput(false); }} className="bg-charcoal text-paper px-6 py-3 rounded-2xl text-sm font-bold shadow-lg">Save</button>
+        <div className="glass p-4 md:p-6 rounded-3xl animate-in slide-in-from-top-2 shadow-soft border-l-4 border-accent flex flex-col sm:flex-row gap-3 max-w-full overflow-hidden">
+            <input type="password" placeholder={t('editor.apiKeyPlaceholder')} className="flex-grow p-4 rounded-2xl bg-paper/80 border border-border outline-none text-sm transition-all text-charcoal min-w-0" value={tempApiKey} onChange={(e) => setTempApiKey(e.target.value)} />
+            <button onClick={() => { updateSettings(prev => ({...prev, apiKeys: {...prev.apiKeys, [settings.activeProvider]: tempApiKey}})); setShowApiKeyInput(false); }} className="bg-charcoal text-paper px-6 py-3 rounded-2xl text-sm font-bold shadow-lg whitespace-nowrap">Save</button>
         </div>
       )}
 
@@ -565,11 +567,11 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {/* PASTE BUTTON - MOVED INSIDE CONTAINER WITH HIGHER Z-INDEX */}
+            {/* PASTE BUTTON - FIX: Z-Index lowered to z-30 to sit below Navbar (z-50) */}
             {!sourceText && !isDragging && !isRestoring && (
                 <button 
                     onClick={handlePasteSource} 
-                    className="absolute top-4 right-4 z-50 px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                    className="absolute top-4 right-4 z-30 px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
                 >
                     📋 {t('editor.paste')}
                 </button>
@@ -591,22 +593,14 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 disabled={isRestoring}
             />
 
-            {/* EMPTY STATE WITH UPLOAD BUTTON (Z-INDEX 10) */}
+            {/* EMPTY STATE - BUTTON REMOVED AS REQUESTED */}
             {!sourceText && !isRestoring && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center">
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
                     <span className="text-5xl mb-4 grayscale opacity-50">📝</span>
                     <p className="font-serif text-lg text-charcoal font-bold mb-2">Editor Kosong</p>
-                    <p className="text-xs text-subtle max-w-[250px] mb-4">
+                    <p className="text-xs text-subtle max-w-[250px]">
                         Ketik langsung, tempel teks, atau seret file novel Anda ke sini.
                     </p>
-                    
-                    {/* Explicit Upload Button requested by user */}
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                        className="relative z-30 px-6 py-2.5 bg-charcoal text-paper rounded-xl font-bold text-sm shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
-                    >
-                        <span>📂</span> Upload File (.txt / .epub)
-                    </button>
                 </div>
             )}
             
@@ -621,7 +615,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           </div>
 
           {sourceText && (
-             <button onClick={handleClearSource} className="absolute -top-3 right-4 z-50 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm">✕</button>
+             // FIX: Z-Index lowered to z-30
+             <button onClick={handleClearSource} className="absolute -top-3 right-4 z-30 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm">✕</button>
           )}
         </div>
 
@@ -666,7 +661,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             </div>
 
             {translatedText && (
-                <button onClick={() => setIsTranslationFullscreen(true)} className="absolute -top-3 right-4 z-50 p-2 bg-indigo-50 border border-indigo-100 text-accent rounded-full hover:bg-accent hover:text-white transition-all shadow-sm">🔍</button>
+                // FIX: Z-Index lowered to z-30
+                <button onClick={() => setIsTranslationFullscreen(true)} className="absolute -top-3 right-4 z-30 p-2 bg-indigo-50 border border-indigo-100 text-accent rounded-full hover:bg-accent hover:text-white transition-all shadow-sm">🔍</button>
             )}
         </div>
       </div>

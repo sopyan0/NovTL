@@ -4,6 +4,8 @@
   "requestFramePermissions": [],
   "permissions": [
     "filesystem",
-    "storage"
+    "storage",
+    "READ_EXTERNAL_STORAGE",
+    "WRITE_EXTERNAL_STORAGE"
   ]
 }

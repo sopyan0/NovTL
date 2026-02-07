@@ -1,109 +1,86 @@
 
 import { SavedTranslation, GlossaryItem, SavedTranslationSummary, NovelProject, ChatMessage, AppSettings } from '../types';
-import { fsRead, fsWrite, fsDelete, initFileSystem } from './fileSystem';
+import { dbService } from '../services/DatabaseService';
+import { initFileSystem } from './fileSystem';
 import { STORAGE_KEY } from '../constants';
 
-// Initialize Folders on Boot
+// Initialize Systems
 initFileSystem();
+dbService.init().catch(console.error);
 
 // --- SECURITY: WIPE DATA ---
 export const wipeAllLocalData = async () => {
-    console.log("🧹 Wiping Local Data is dangerous in File System mode.");
-    // Di mode file system, kita hanya menghapus file index agar app terlihat 'reset', 
-    // tapi tidak menghapus file asli user di folder Documents demi keamanan data mereka.
-    await fsDelete('projects.json');
-    await fsDelete('chat_history.json');
     localStorage.removeItem(STORAGE_KEY);
     window.location.reload();
 };
 
-// --- SETTINGS ---
-// Settings tetap di LocalStorage karena kecil dan bersifat konfigurasi app
-export const saveSettingsToCloud = async (settings: Partial<AppSettings>) => {};
-export const getSettingsFromCloud = async (): Promise<Partial<AppSettings> | null> => null;
-
 // --- PROJECTS ---
 
 export const saveProjectToDB = async (project: NovelProject): Promise<void> => {
-    // 1. Simpan Detail Proyek ke file JSON terpisah
-    await fsWrite(`project_${project.id}_data.json`, project);
-
-    // 2. Update Index Proyek (Daftar Isi)
-    let projects = await fsRead<NovelProject[]>('projects.json') || [];
-    const idx = projects.findIndex(p => p.id === project.id);
-    
-    // Di index, kita simpan versi ringan (tanpa glosarium berat)
-    const summary = { ...project, glossary: [] }; 
-    
-    if (idx >= 0) projects[idx] = summary;
-    else projects.push(summary);
-    
-    await fsWrite('projects.json', projects);
+    await dbService.saveProject(project);
 };
 
 export const getProjectsFromDB = async (): Promise<NovelProject[]> => {
-    // Baca index
-    const projects = await fsRead<NovelProject[]>('projects.json') || [];
-    
-    // Jika user membuka detail, nanti kita load file detailnya.
-    // Untuk list awal, kembalikan summary saja.
-    return projects;
+    return await dbService.getProjects();
 };
 
-// Untuk load full data (termasuk glosarium) saat proyek aktif
 export const loadFullProject = async (projectId: string): Promise<NovelProject | null> => {
-    const fullData = await fsRead<NovelProject>(`project_${projectId}_data.json`);
-    return fullData || null;
+    const projects = await dbService.getProjects();
+    return projects.find(p => p.id === projectId) || null;
 };
 
 // --- TRANSLATIONS (CHAPTERS) ---
 
 export const saveTranslationToDB = async (translation: SavedTranslation): Promise<void> => {
-    // Simpan isi bab ke file terpisah: /chapters/chapter_{id}.json
-    await fsWrite(`chapters/chapter_${translation.id}.json`, translation);
-    
-    // Update Index Bab per Proyek: /project_{id}_chapters.json
-    let summaries = await fsRead<SavedTranslationSummary[]>(`project_${translation.projectId}_chapters.json`) || [];
-    const idx = summaries.findIndex(s => s.id === translation.id);
-    
-    const summary: SavedTranslationSummary = {
-        id: translation.id,
-        projectId: translation.projectId,
-        name: translation.name,
-        timestamp: translation.timestamp
-    };
-
-    if (idx >= 0) summaries[idx] = summary;
-    else summaries.push(summary);
-
-    await fsWrite(`project_${translation.projectId}_chapters.json`, summaries);
+    await dbService.saveChapter(translation);
 };
 
 export const getTranslationSummariesByProjectId = async (projectId: string): Promise<SavedTranslationSummary[]> => {
-    return await fsRead<SavedTranslationSummary[]>(`project_${projectId}_chapters.json`) || [];
+    return await dbService.getChapterSummaries(projectId);
 };
 
 export const getTranslationById = async (id: string): Promise<SavedTranslation | undefined> => {
-    const data = await fsRead<SavedTranslation>(`chapters/chapter_${id}.json`);
-    return data || undefined;
+    return await dbService.getChapterById(id);
+};
+
+// NEW: Search function for AI
+export const searchTranslations = async (projectId: string, query: string): Promise<SavedTranslation[]> => {
+    return await dbService.searchChaptersContent(projectId, query);
+};
+
+// NEW: Context Fetcher (Mengambil akhir bab terakhir untuk konteks AI)
+export const getPreviousChapterContext = async (projectId: string): Promise<string> => {
+    try {
+        // Ambil daftar bab, urutkan dari yang terbaru (timestamp DESC)
+        const summaries = await dbService.getChapterSummaries(projectId);
+        if (summaries.length === 0) return "";
+
+        // Ambil bab paling baru yang tersimpan
+        const lastChapterId = summaries[0].id;
+        const fullChapter = await dbService.getChapterById(lastChapterId);
+
+        if (!fullChapter || !fullChapter.translatedText) return "";
+
+        // Ambil 1000 karakter terakhir untuk memberi konteks ke AI
+        // (Agar AI tahu adegan terakhir berhenti di mana)
+        const text = fullChapter.translatedText;
+        return text.length > 1500 ? "..." + text.slice(-1500) : text;
+    } catch (e) {
+        console.warn("Gagal mengambil konteks bab sebelumnya:", e);
+        return "";
+    }
 };
 
 export const deleteTranslationFromDB = async (id: string): Promise<void> => {
-    // Hapus file fisik
-    await fsDelete(`chapters/chapter_${id}.json`);
-    
-    // Kita tidak bisa update index dengan mudah tanpa projectId. 
-    // Tapi karena UI me-load ulang list, index akan diperbaiki saat save berikutnya.
-    // (Peningkatan logic: idealnya passing projectId ke fungsi delete ini)
+    await dbService.deleteChapter(id);
 };
 
 export const clearProjectTranslationsFromDB = async (projectId: string): Promise<void> => {
-    // Hanya hapus index, file fisik biarkan (safe delete) atau hapus loop (agak berat IO nya)
-    await fsDelete(`project_${projectId}_chapters.json`);
+    await dbService.clearProjectChapters(projectId);
 };
 
 // --- GLOSSARY ---
-// Glosarium sekarang menyatu dengan file project_{id}_data.json
+
 export const saveGlossaryToDB = async (projectId: string, glossary: GlossaryItem[]): Promise<void> => {
     const project = await loadFullProject(projectId);
     if (project) {
@@ -117,31 +94,18 @@ export const getGlossaryByProjectId = async (projectId: string): Promise<Glossar
     return project?.glossary || [];
 };
 
-export const deleteGlossaryItemsFromDB = async (ids: string[]): Promise<void> => {
-    // Handled by saveGlossaryToDB logic in SettingsContext
-};
-
 // --- CHAT HISTORY ---
 
 export const saveChatToDB = async (message: ChatMessage): Promise<void> => {
-    let history = await fsRead<ChatMessage[]>('chat_history.json') || [];
-    // Upsert
-    const idx = history.findIndex(m => m.id === message.id);
-    if (idx >= 0) history[idx] = message;
-    else history.push(message);
-    
-    // Limit history size to 50 messages to keep file small
-    if (history.length > 50) history = history.slice(-50);
-    
-    await fsWrite('chat_history.json', history);
+    await dbService.saveChat(message);
 };
 
 export const getChatHistoryFromDB = async (): Promise<ChatMessage[]> => {
-    return await fsRead<ChatMessage[]>('chat_history.json') || [];
+    return await dbService.getChatHistory();
 };
 
 export const clearChatHistoryFromDB = async (): Promise<void> => {
-    await fsDelete('chat_history.json');
+    await dbService.clearChat();
 };
 
 // --- HELPERS ---

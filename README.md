@@ -1,7 +1,7 @@
 
 # 🍡 NovTL Studio - AI Novel Translator
 
-NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk menerjemahkan novel dengan nuansa sastra tinggi, konsistensi glosarium, dan pengalaman membaca yang nyaman.
+NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk menerjemahkan novel dengan nuansa sastra tinggi, konsistensi glosarium yang ketat, dan manajemen bab yang cerdas.
 
 ## 🚀 Cara Instalasi
 
@@ -17,12 +17,13 @@ NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk men
 
 ---
 
-## 🛠️ Fitur Utama
+## 🛠️ Fitur Utama (New)
 
-- **Penerjemahan Bernuansa**: AI tidak hanya menerjemahkan kata demi kata, tapi menjaga alur cerita agar tetap enak dibaca.
+- **🧠 Context-Aware AI (Baru!)**: AI mengingat konteks bab sebelumnya. Saat menerjemahkan Bab 5, AI otomatis membaca akhir Bab 4 dari database agar transisi cerita mulus.
+- **⚡ SQLite Engine**: Menggunakan database SQLite (native di Android) untuk menyimpan ribuan bab tanpa membuat HP lemot.
+- **🤖 Danggo Assistant**: Chatbot asisten yang bisa membaca isi editor, mencari informasi di bab-bab lama (Deep Search), dan mengelola glosarium lewat perintah suara/teks.
 - **Glosarium Cerdas**: Pastikan nama karakter, jurus, atau istilah dunia novel tetap konsisten.
-- **Hybrid Storage**: Menggabungkan kecepatan Database Lokal (Cache) dengan keamanan File Fisik di storage Anda.
-- **Export EPUB**: Simpan hasil terjemahan menjadi file buku digital (EPUB) yang siap dibaca di Google Play Books atau Moon+ Reader.
+- **Smart Editor**: Fitur drag & drop file EPUB/TXT, auto-save instan, dan mode baca fokus.
 
 ---
 

@@ -5,7 +5,7 @@ import { chatWithAssistant, hasValidApiKey } from '../services/llmService';
 import { generateId } from '../utils/id';
 import { useSettings } from './SettingsContext';
 import { useEditor } from './EditorContext';
-import { getTranslationsByProjectId, saveChatToDB, getChatHistoryFromDB, clearChatHistoryFromDB } from '../utils/storage';
+import { searchTranslations, saveChatToDB, getChatHistoryFromDB, clearChatHistoryFromDB } from '../utils/storage';
 import { useAuth } from './AuthContext';
 
 interface ChatContextType {
@@ -34,7 +34,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isTyping, setIsTyping] = useState(false);
   const messagesRef = useRef<ChatMessage[]>([]); 
 
-  // --- INITIALIZATION (LOAD FROM DB) ---
   useEffect(() => {
     const initChat = async () => {
         const isEnglish = settings.appLanguage === 'en';
@@ -52,7 +51,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         }
 
-        // Default Welcome Message if no history
         const initialText = isEnglish ? WELCOME_MSG_EN : WELCOME_MSG_ID;
         const initial: ChatMessage = { 
             id: generateId(), 
@@ -67,14 +65,12 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initChat();
   }, [user, settings.appLanguage]);
 
-  // HELPER: Add message to State AND DB
   const addMessage = useCallback((msg: ChatMessage) => {
     setMessages(prev => {
         const next = [...prev, msg];
         messagesRef.current = next;
         return next;
     });
-    // Sync to DB
     saveChatToDB(msg).catch(e => console.error("Chat sync failed", e));
   }, []);
 
@@ -82,9 +78,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setMessages(prev => {
           const next = prev.map(m => {
               if (m.pendingAction) {
-                  // FIX: Hapus pendingAction dari state dan DB agar tidak muncul lagi
                   const { pendingAction, ...rest } = m;
-                  saveChatToDB(rest).catch(console.error); // Update DB versi bersih
+                  saveChatToDB(rest).catch(console.error); 
                   return rest;
               }
               return m;
@@ -122,11 +117,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     updateProject(activeProject.id, prevProject => {
         let newGlossary = [...prevProject.glossary];
-        const isEnglish = settings.appLanguage === 'en';
-
+        
         if (type === 'ADD_GLOSSARY') {
             const addPayload = payload as AddGlossaryPayload[];
-            // FIX: Normalisasi (lowercase & trim) saat cek duplikat di DB agar tidak double
             const existingOrignals = new Set(newGlossary.map(g => g.original.toLowerCase().trim()));
             
             const newItems = addPayload
@@ -138,9 +131,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     sourceLanguage: activeProject.sourceLanguage
                 }));
 
-            // Proteksi ganda: Jika setelah filter ternyata kosong (duplikat semua), jangan update state project
             if (newItems.length === 0) return prevProject;
-
             newGlossary = [...newGlossary, ...newItems];
         } else {
              const deletePayload = payload as DeleteGlossaryPayload[];
@@ -156,18 +147,14 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { ...prevProject, glossary: newGlossary };
     });
 
-    // FIX: Update UI Chat DAN Hapus pendingAction dari DB agar tidak muncul lagi saat reload
     setMessages(prev => {
         const isEnglish = settings.appLanguage === 'en';
         const successTag = isEnglish ? "\n\n✅ *Action applied!*" : "\n\n✅ *Aksi berhasil diterapkan!*";
         
         const next = prev.map(m => {
             if (m.id === messageId) {
-                // Destructure untuk membuang pendingAction selamanya
                 const { pendingAction, ...cleanMessage } = m;
                 const updatedMsg = { ...cleanMessage, text: m.text + successTag };
-                
-                // Simpan versi bersih ke DB
                 saveChatToDB(updatedMsg).catch(console.error);
                 return updatedMsg;
             }
@@ -275,24 +262,18 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (result.type === 'READ_SAVED_TRANSLATION') {
             const query = result.payload.toLowerCase().trim();
-            const allTranslations = await getTranslationsByProjectId(settings.activeProjectId);
-            const titleMatch = allTranslations.find(t => t.name.toLowerCase().includes(query));
+            
+            // OPTIMIZED SQL SEARCH (Memakai searchTranslations alih-alih meload semua)
+            const matchedTranslations = await searchTranslations(settings.activeProjectId, query);
 
             let relevantContext = "";
-            
-            if (titleMatch) {
-                const contentPreview = titleMatch.translatedText.slice(0, 10000);
-                relevantContext = `[DITEMUKAN BAB LIBRARY: "${titleMatch.name}"]\nISI:\n${contentPreview}`;
-            } else {
-                 const contentMatches = allTranslations.filter(t => t.translatedText.toLowerCase().includes(query));
-                 if (contentMatches.length > 0) {
-                     relevantContext = contentMatches.slice(0,3).map(m => `SUMBER: **${m.name}**\nTEMUAN:\n${m.translatedText.slice(0, 500)}...`).join('\n\n');
-                 }
-            }
-
-            if (relevantContext) {
-                const dataInjection = `[SYSTEM INFO: Danggo mencari "${result.payload}" di Library.]\n\n${relevantContext}`;
-                await processUserMessage(dataInjection, true, recursionDepth + 1);
+            if (matchedTranslations.length > 0) {
+                 relevantContext = matchedTranslations.map(m => 
+                    `[HASIL PENCARIAN: "${m.name}"]\nTEMUAN:\n${m.translatedText.slice(0, 800)}...`
+                 ).join('\n\n');
+                 
+                 const dataInjection = `[SYSTEM INFO: Danggo menemukan ${matchedTranslations.length} bab yang relevan di Library.]\n\n${relevantContext}`;
+                 await processUserMessage(dataInjection, true, recursionDepth + 1);
             } else {
                 const notFoundMsg = isEnglish ? "Not found in library." : "Tidak ditemukan di koleksi tersimpan.";
                 addMessage({ id: generateId(), role: 'model', text: notFoundMsg, timestamp: Date.now() });
@@ -303,25 +284,18 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         let pendingAction: PendingAction | undefined;
         let finalMessage = result.message;
 
-        // FIX: Filter Duplikat Dini sebelum menampilkan konfirmasi ke User
         if (result.type === 'ADD_GLOSSARY') {
             const existingOrignals = new Set(activeProject.glossary.map(g => g.original.toLowerCase().trim()));
-            
-            // Filter hanya yang belum ada di database
             const validItems = result.payload.filter(p => p.original && !existingOrignals.has(p.original.toLowerCase().trim()));
             
             if (validItems.length > 0) {
-                // Ada item baru -> Buat Pending Action
                 pendingAction = { type: 'ADD_GLOSSARY', payload: validItems };
-                
-                // Jika sebagian duplikat, beri tahu user di pesannya
                 if (validItems.length < result.payload.length) {
                     finalMessage += isEnglish 
                         ? "\n(Some duplicates were automatically removed)" 
                         : "\n(Beberapa kata duplikat otomatis dibuang)";
                 }
             } else {
-                // Semua duplikat -> Batalkan Action & Ubah Pesan
                 finalMessage = isEnglish 
                     ? "✨ All these words are already in your glossary! No changes needed." 
                     : "✨ Wah, semua kata tersebut ternyata sudah ada di glosarium Kakak! Tidak ada yang perlu ditambahkan.";

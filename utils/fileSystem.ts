@@ -1,7 +1,6 @@
 
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
 import { putItem, getItem, deleteItem } from './idb';
 
 declare global {
@@ -13,33 +12,32 @@ declare global {
             delete: (filename: string) => Promise<{ success: boolean }>;
             getStoragePath: () => Promise<string>;
             readClipboard: () => Promise<string>;
+            saveToDownloads: (filename: string, base64Data: string) => Promise<{ success: boolean; path?: string; error?: string }>;
             platform: string;
         };
     }
 }
 
 export const isElectron = () => !!window.novtlAPI;
-
-// FIXED: Gunakan Capacitor Core untuk deteksi platform yang akurat.
-// Regex lama gagal karena Capacitor Android modern menggunakan scheme 'https://', sehingga dianggap Web biasa.
 export const isCapacitorNative = () => Capacitor.isNativePlatform();
 
 /**
  * HYBRID STORAGE ENGINE
+ * Mengelola penyimpanan internal aplikasi (Working Directory)
  */
 
 export const fsWrite = async (filename: string, content: string | object): Promise<void> => {
     const stringData = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
     
-    // 1. Simpan ke Cache (IDB) dulu agar UI cepat
+    // Cache ke IDB (untuk performa baca cepat)
     await putItem('fs_cache', { id: filename, content: stringData });
 
-    // 2. Simpan ke File Fisik (Storage Persisten)
     if (isElectron()) {
         const res = await window.novtlAPI!.write(filename, stringData);
         if (!res.success) throw new Error(res.error || "Failed to write to disk");
     } else if (isCapacitorNative()) {
         try {
+            // Simpan ke Documents internal aplikasi (Hidden/Private)
             await Filesystem.writeFile({
                 path: `NovTL/${filename}`,
                 data: stringData,
@@ -49,9 +47,7 @@ export const fsWrite = async (filename: string, content: string | object): Promi
             });
         } catch (e: any) {
             console.error("FS Write Error:", e);
-            // CRITICAL: Jangan diam saja jika gagal tulis file!
-            // Lempar error agar UI tahu bahwa penyimpanan fisik gagal.
-            throw new Error(`Gagal menyimpan ke penyimpanan internal: ${e.message}. Pastikan izin penyimpanan aktif.`);
+            throw new Error(`Gagal menyimpan ke penyimpanan internal: ${e.message}`);
         }
     }
 };
@@ -93,61 +89,98 @@ export const fsDelete = async (filename: string): Promise<void> => {
 };
 
 /**
- * FIXED: Gunakan 'Share API' untuk Android.
- * Ini memicu dialog sistem "Simpan ke..." atau "Kirim ke...", 
- * yang 100% berhasil di Android 11+ tanpa masalah permission Download folder.
+ * FEATURE: DIRECT DOWNLOAD (REAL DOWNLOAD FOLDER)
+ * 
+ * Android: Menyimpan langsung ke folder publik "Download/NovTL" menggunakan ExternalStorage.
+ * Ini membuat file langsung muncul di File Manager / Downloads app tanpa menu Share.
+ * 
+ * Electron: Membuka dialog save atau menyimpan ke folder Downloads OS.
  */
 export const triggerDownload = async (filename: string, blob: Blob) => {
-    if (isCapacitorNative()) {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-            const base64data = (reader.result as string).split(',')[1];
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    
+    reader.onloadend = async () => {
+        const base64data = (reader.result as string).split(',')[1];
+        
+        if (isElectron()) {
+            // ELECTRON: Save to Downloads folder via Main Process
             try {
-                // 1. Tulis ke Cache sementara
-                const tempPath = `temp_export/${filename}`;
-                const writeResult = await Filesystem.writeFile({
-                    path: tempPath,
+                const res = await window.novtlAPI!.saveToDownloads(filename, base64data);
+                if (res.success) {
+                    alert(`✅ File berhasil didownload!\n\n📂 Lokasi: ${res.path}`);
+                } else {
+                    alert(`❌ Gagal menyimpan: ${res.error}`);
+                }
+            } catch (e) {
+                alert("Error saat menyimpan di Desktop.");
+            }
+        } 
+        else if (isCapacitorNative()) {
+            // ANDROID: Save to Public Download folder
+            try {
+                // Trik Capacitor: Directory.ExternalStorage + Path "Download/..." 
+                // ini mengarah ke /storage/emulated/0/Download/NovTL/...
+                const exportPath = `Download/NovTL/${filename}`;
+                
+                await Filesystem.writeFile({
+                    path: exportPath,
                     data: base64data,
-                    directory: Directory.Cache, // Gunakan Cache directory yang selalu boleh ditulis
+                    directory: Directory.ExternalStorage, // Akses ke root storage publik
                     recursive: true
                 });
 
-                // 2. Panggil Share Dialog
-                await Share.share({
-                    title: 'Export NovTL',
-                    text: `Berikut adalah file export Anda: ${filename}`,
-                    files: [writeResult.uri],
-                    dialogTitle: 'Simpan atau Bagikan File'
-                });
+                // File di folder Download publik biasanya otomatis terindeks oleh Android MediaScanner modern
+                alert(`✅ BERHASIL DIDOWNLOAD!\n\n📂 Cek File Manager Anda:\nPenyimpanan Internal > Download > NovTL > ${filename}`);
 
             } catch (e: any) {
-                alert(`Export Error: ${e.message}`);
+                console.error("Download Error", e);
+                
+                // Fallback: Jika ExternalStorage gagal (misal di Android versi sangat lama atau strict)
+                // Kita coba simpan ke Documents lalu beri tahu user
+                try {
+                     await Filesystem.writeFile({
+                        path: `NovTL_Exports/${filename}`,
+                        data: base64data,
+                        directory: Directory.Documents,
+                        recursive: true
+                    });
+                    alert(`⚠️ Gagal akses folder Download.\nFile disimpan di: Documents/NovTL_Exports/${filename}`);
+                } catch(err2: any) {
+                    alert(`❌ Gagal total menyimpan file.\nError: ${e.message}`);
+                }
             }
-        };
-    } else {
-        // Desktop / Web behavior
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.click();
-        URL.revokeObjectURL(url);
-    }
+        } else {
+            // WEB Browser (Chrome/Firefox/Safari)
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link); // Required for Firefox
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    };
 };
 
 export const initFileSystem = async () => {
     if (isCapacitorNative()) {
         try {
-            // REQUEST PERMISSION SECARA EKSPLISIT SAAT INIT
             const perm = await Filesystem.checkPermissions();
             if (perm.publicStorage !== 'granted') {
                 await Filesystem.requestPermissions();
             }
 
-            // Buat folder kerja
+            // Init Folder Kerja (Private/App Scope)
             await Filesystem.mkdir({ path: 'NovTL', directory: Directory.Documents, recursive: true });
-            await Filesystem.mkdir({ path: 'NovTL/chapters', directory: Directory.Documents, recursive: true });
+            
+            // Coba Init Folder Export di Download (Optional, mungkin gagal kalau permission belum ada saat init)
+            try {
+                await Filesystem.mkdir({ path: 'Download/NovTL', directory: Directory.ExternalStorage, recursive: true });
+            } catch (e) {
+                // Ignore, akan dibuat otomatis saat write file dengan recursive: true
+            }
         } catch (e) {
             console.warn("Init FS Warning:", e);
         }
