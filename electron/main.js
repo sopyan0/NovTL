@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -138,3 +138,8 @@ ipcMain.handle('fs-delete', async (event, { filename }) => {
 
 // 5. Cek Path Penyimpanan (Untuk Debug)
 ipcMain.handle('get-storage-path', () => BASE_DIR);
+
+// 6. CLIPBOARD (Native Electron)
+ipcMain.handle('clipboard-read', () => {
+    return clipboard.readText();
+});

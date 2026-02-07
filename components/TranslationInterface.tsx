@@ -19,7 +19,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { generateId } from '../utils/id';
 import { parseEpub, loadChapterText } from '../utils/epubParser';
 import { putItem, getItem, deleteItem } from '../utils/idb';
-import { isCapacitorNative } from '../utils/fileSystem';
+import { isCapacitorNative, isElectron } from '../utils/fileSystem';
 
 // TOAST COMPONENT
 const Toast: React.FC<{ message: string; show: boolean; onClose: () => void }> = ({ message, show, onClose }) => {
@@ -240,12 +240,16 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const handlePasteSource = async () => {
       try {
           let text = '';
-          // Gunakan Native Clipboard jika di Android/iOS untuk bypass permission browser
-          if (isCapacitorNative()) {
-              const { type, value } = await Clipboard.read();
+          
+          if (isElectron() && window.novtlAPI) {
+              // ELECTRON NATIVE
+              text = await window.novtlAPI.readClipboard();
+          } else if (isCapacitorNative()) {
+              // ANDROID/iOS NATIVE
+              const { value } = await Clipboard.read();
               text = value;
           } else {
-              // Web Fallback
+              // WEB FALLBACK
               text = await navigator.clipboard.readText();
           }
 
@@ -255,9 +259,14 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           } else {
              showToastNotification("Clipboard kosong!");
           }
-      } catch (err) {
+      } catch (err: any) {
           console.error("Paste failed", err);
-          alert("Gagal menempel. Pastikan aplikasi memiliki izin clipboard di pengaturan Android.");
+          if (err.name === 'NotAllowedError' || err.message?.includes('denied')) {
+            setError("Akses Clipboard diblokir. Coba tempel manual.");
+          } else {
+            setError("Gagal membaca Clipboard.");
+          }
+          setTimeout(() => setError(null), 3000);
       }
   };
 

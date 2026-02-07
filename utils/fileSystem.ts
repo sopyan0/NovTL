@@ -1,4 +1,5 @@
 
+import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { putItem, getItem, deleteItem } from './idb';
@@ -11,15 +12,17 @@ declare global {
             list: (folder: string) => Promise<string[]>;
             delete: (filename: string) => Promise<{ success: boolean }>;
             getStoragePath: () => Promise<string>;
+            readClipboard: () => Promise<string>;
             platform: string;
         };
     }
 }
 
 export const isElectron = () => !!window.novtlAPI;
-export const isCapacitorNative = () => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (window.location.protocol === 'capacitor:' || window.location.protocol === 'http:');
-};
+
+// FIXED: Gunakan Capacitor Core untuk deteksi platform yang akurat.
+// Regex lama gagal karena Capacitor Android modern menggunakan scheme 'https://', sehingga dianggap Web biasa.
+export const isCapacitorNative = () => Capacitor.isNativePlatform();
 
 /**
  * HYBRID STORAGE ENGINE

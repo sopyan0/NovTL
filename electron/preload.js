@@ -7,5 +7,6 @@ contextBridge.exposeInMainWorld('novtlAPI', {
     list: (folder) => ipcRenderer.invoke('fs-list', { folder }),
     delete: (filename) => ipcRenderer.invoke('fs-delete', { filename }),
     getStoragePath: () => ipcRenderer.invoke('get-storage-path'),
+    readClipboard: () => ipcRenderer.invoke('clipboard-read'),
     platform: 'electron'
 });
