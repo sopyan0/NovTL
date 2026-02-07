@@ -8,7 +8,7 @@ import { searchTranslations, getTranslationSummariesByProjectId } from "../utils
 
 const API_ENDPOINTS: Record<string, string> = {
   'OpenAI (GPT)': 'https://api.openai.com/v1/chat/completions',
-  'DeepSeek': 'https://api.api.deepseek.com/chat/completions',
+  'DeepSeek': 'https://api.deepseek.com/chat/completions', // FIX: Typo corrected
   'Grok (xAI)': 'https://api.x.ai/v1/chat/completions'
 };
 
@@ -154,7 +154,7 @@ export const translateTextStream = async (
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
   mode: 'standard' | 'high_quality' = 'standard',
-  previousChapterContext?: string // NEW: Context from SQLite
+  previousChapterContext?: string
 ): Promise<{ result: string, detectedLanguage: string | null }> => {
   const config = getAIClientConfig(settings);
   if (!config.apiKey) throw new Error(`API Key for ${config.provider} is missing.`);
@@ -198,7 +198,6 @@ export const translateTextStream = async (
                 // CONTEXT LOGIC
                 let contextPrompt = "";
                 if (index === 0 && previousChapterContext) {
-                    // Inject previous chapter ending at the very start
                     contextPrompt = `\n[STORY CONTEXT FROM PREVIOUS CHAPTER]\n(The story continues from here)...${previousChapterContext}\n`;
                 } else if (index > 0) {
                     contextPrompt = `\n[PREVIOUS CHUNK CONTEXT]\n...${previousContextSource.slice(-300)}\n`;
@@ -298,8 +297,9 @@ export const translateTextStream = async (
   return { result: fullText.trim(), detectedLanguage: null };
 };
 
-// --- CHAT & TOOLS ---
+// --- CHAT & TOOLS (UPDATED FOR MULTI-PROVIDER SUPPORT) ---
 
+// 1. Gemini Tool Definitions (Google SDK Format)
 const glossaryToolGemini: FunctionDeclaration = {
   name: 'manage_glossary',
   description: 'Add or Delete glossary items. CRITICAL: Use ONLY when user EXPLICITLY asks to "add", "save", or "delete" specific terms. DO NOT use for general chat or greetings.',
@@ -330,11 +330,66 @@ const memoryToolGemini: FunctionDeclaration = {
   }
 };
 
-const readFullContentTool: FunctionDeclaration = {
+const readFullContentToolGemini: FunctionDeclaration = {
   name: 'read_full_editor_content',
   description: 'Read the ENTIRE text in the current editor. ONLY use if user explicitly asks about the current active chapter in detail.',
   parameters: { type: Type.OBJECT, properties: {}, required: [] }
 };
+
+// 2. OpenAI/DeepSeek/Grok Tool Definitions (Standard JSON Schema)
+const openAITools = [
+    {
+        type: "function",
+        function: {
+            name: "manage_glossary",
+            description: "Add or Delete glossary items. CRITICAL: Use ONLY when user EXPLICITLY asks to 'add', 'save', or 'delete' terms.",
+            parameters: {
+                type: "object",
+                properties: {
+                    action: { type: "string", enum: ["ADD", "DELETE"] },
+                    items: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                original: { type: "string" },
+                                translated: { type: "string" }
+                            },
+                            required: ["original"]
+                        }
+                    }
+                },
+                required: ["action", "items"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "read_historical_content",
+            description: "Search for info in saved chapters. ONLY use if user asks to 'search', 'find', or 'read' a previous chapter.",
+            parameters: {
+                type: "object",
+                properties: {
+                    search_query: { type: "string", description: "Keyword or topic to look for." }
+                },
+                required: ["search_query"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "read_full_editor_content",
+            description: "Read the ENTIRE text in the current editor. Use only if user asks about current chapter detail.",
+            parameters: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        }
+    }
+];
 
 export const chatWithAssistant = async (
     userMessage: string, 
@@ -390,15 +445,17 @@ export const chatWithAssistant = async (
 
   const systemPrompt = language === 'en' ? systemPromptEN : systemPromptID;
 
-  const historyContent = history.filter(m => !m.isHidden).map(m => ({ 
-    role: m.role === 'model' ? 'model' as const : 'user' as const, 
-    parts: [{ text: m.text.slice(0, 500) }] 
-  })).slice(-6); 
-
+  // Formatting History for API
   const finalUserMessage = `${userMessage}\n\n${contextInjection}`;
 
+  // --- GEMINI PROVIDER ---
   if (config.provider === 'Gemini') {
     try {
+      const historyContent = history.filter(m => !m.isHidden).map(m => ({ 
+        role: m.role === 'model' ? 'model' as const : 'user' as const, 
+        parts: [{ text: m.text.slice(0, 500) }] 
+      })).slice(-6);
+
       const ai = new GoogleGenAI({ apiKey: config.apiKey });
       const response = await ai.models.generateContent({
         model: config.model,
@@ -408,7 +465,7 @@ export const chatWithAssistant = async (
         ],
         config: {
           systemInstruction: systemPrompt,
-          tools: [{ functionDeclarations: [glossaryToolGemini, memoryToolGemini, readFullContentTool] }],
+          tools: [{ functionDeclarations: [glossaryToolGemini, memoryToolGemini, readFullContentToolGemini] }],
           temperature: 0.4
         }
       });
@@ -419,7 +476,61 @@ export const chatWithAssistant = async (
     } catch (err: any) {
         throw new Error(mapAIError(err));
     }
+  } 
+  
+  // --- STANDARD PROVIDERS (OpenAI, DeepSeek, Grok) ---
+  else if (config.endpoint) {
+    try {
+        const historyContent = history.filter(m => !m.isHidden).map(m => ({ 
+            role: m.role === 'model' ? 'assistant' : 'user', 
+            content: m.text.slice(0, 500) 
+        })).slice(-6);
+
+        const response = await fetch(config.endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+            },
+            body: JSON.stringify({
+                model: config.model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    ...historyContent,
+                    { role: 'user', content: finalUserMessage }
+                ],
+                tools: openAITools,
+                tool_choice: "auto",
+                temperature: 0.4
+            })
+        });
+
+        const json = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(json.error?.message || `API Error ${response.status}`);
+        }
+
+        const choice = json.choices?.[0];
+        if (!choice) throw new Error("Empty response from AI");
+
+        // Handle Tool Calls (Standard format)
+        if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+            const toolCall = choice.message.tool_calls[0];
+            const args = JSON.parse(toolCall.function.arguments);
+            return handleToolCall(toolCall.function.name, args, settings.activeProjectId, language);
+        }
+
+        return { 
+            type: 'NONE', 
+            message: choice.message.content || (language === 'en' ? "No response." : "Tidak ada respon.") 
+        };
+
+    } catch (err: any) {
+        throw new Error(mapAIError(err));
+    }
   }
+
   return { type: 'NONE', message: language === 'en' ? "Provider not supported for chat." : "Provider ini belum mendukung chat." };
 };
 
