@@ -152,10 +152,7 @@ const SettingsPage: React.FC = () => {
             translations: translations
         };
         const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
-        // Menggunakan nama file yang aman
         const safeName = project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        // File system handler (utils/fileSystem.ts) sekarang menggunakan Share API di Android
-        // yang akan memicu dialog "Save as" atau share sheet.
         const { triggerDownload } = await import('../utils/fileSystem');
         await triggerDownload(`backup_${safeName}.json`, blob);
       } catch (e) {
@@ -196,6 +193,22 @@ const SettingsPage: React.FC = () => {
     item.original.toLowerCase().includes(glossarySearchTerm.toLowerCase()) || 
     item.translated.toLowerCase().includes(glossarySearchTerm.toLowerCase())
   );
+
+  // --- GLOSSARY SELECTION LOGIC ---
+  const handleSelectAll = () => {
+      if (selectedIds.size === filteredGlossary.length) {
+          setSelectedIds(new Set()); // Deselect All
+      } else {
+          setSelectedIds(new Set(filteredGlossary.map(i => i.id))); // Select All Visible
+      }
+  };
+
+  const handleToggleSelect = (id: string) => {
+      const next = new Set(selectedIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setSelectedIds(next);
+  };
 
   return (
     <div className="space-y-8 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500 w-full overflow-hidden">
@@ -256,10 +269,125 @@ const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* DATA MANAGEMENT */}
+      {/* GLOSSARY (REDESIGNED) */}
+      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 bg-charcoal/5 dark:bg-[#0a0a0a] border border-charcoal/10 dark:border-white/10">
+        
+        {/* Header Glosarium */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-border">
+            <div>
+                <h2 className="text-xl font-serif font-bold text-charcoal flex items-center gap-2">
+                    📖 Glosarium / Kamus
+                </h2>
+                <p className="text-subtle text-xs mt-1">AI akan konsisten menggunakan istilah ini.</p>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full md:w-auto">
+                {filteredGlossary.length > 0 && (
+                    <button 
+                        onClick={handleSelectAll} 
+                        className="px-4 py-2 text-xs font-bold text-subtle hover:text-charcoal bg-card border border-border rounded-xl transition-all"
+                    >
+                        {selectedIds.size === filteredGlossary.length ? 'Batal Semua' : 'Pilih Semua'}
+                    </button>
+                )}
+
+                {selectedIds.size > 0 ? (
+                    <div className="flex gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <button onClick={() => setSelectedIds(new Set())} className="bg-gray-200 dark:bg-gray-800 text-charcoal px-4 py-2 rounded-xl font-bold text-xs hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
+                            Batal Pilih
+                        </button>
+                        <button onClick={() => setIsConfirmBulkDeleteOpen(true)} className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg hover:bg-red-600 transition-colors">
+                            Hapus Terpilih ({selectedIds.size})
+                        </button>
+                    </div>
+                ) : (
+                    <div className="relative w-full md:w-48">
+                        <input 
+                            type="text" 
+                            placeholder="Cari kata..." 
+                            value={glossarySearchTerm}
+                            onChange={(e) => setGlossarySearchTerm(e.target.value)}
+                            className="w-full px-3 py-2 bg-card border border-border rounded-xl text-xs outline-none focus:border-accent transition-colors"
+                        />
+                    </div>
+                )}
+            </div>
+        </div>
+
+        {/* Input Form Baru */}
+        <div className="bg-gray-900 dark:bg-black p-4 rounded-2xl border border-gray-800 flex flex-col md:flex-row items-center gap-3 shadow-inner">
+          <input 
+            type="text" 
+            placeholder="Istilah Asli" 
+            className="flex-grow w-full md:w-auto p-3 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm outline-none focus:border-gray-500 placeholder-gray-500 font-medium" 
+            value={newWord} 
+            onChange={(e) => setNewWord(e.target.value)} 
+          />
+          <span className="text-gray-500">➜</span>
+          <input 
+            type="text" 
+            placeholder="Terjemahan" 
+            className="flex-grow w-full md:w-auto p-3 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm outline-none focus:border-gray-500 placeholder-gray-500 font-medium" 
+            value={newTrans} 
+            onChange={(e) => setNewTrans(e.target.value)} 
+          />
+          <button 
+            onClick={() => { if(newWord && newTrans) { addGlossaryItem(newWord, newTrans); setNewWord(''); setNewTrans(''); }}} 
+            className="w-full md:w-auto bg-white text-charcoal px-6 py-3 rounded-xl font-bold text-sm shadow-lg border-2 border-yellow-400 hover:bg-yellow-50 active:scale-95 transition-all whitespace-nowrap"
+          >
+            + Tambah
+          </button>
+        </div>
+
+        {/* Daftar Kata (List Style Baru) */}
+        <div className="max-h-[400px] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+            {filteredGlossary.map(item => (
+                <div key={item.id} className="group flex items-center gap-4 p-4 rounded-xl border bg-[#1e293b] border-[#334155] hover:border-gray-500 transition-all shadow-sm">
+                    {/* Checkbox */}
+                    <div className="relative flex items-center">
+                        <input 
+                            type="checkbox" 
+                            checked={selectedIds.has(item.id)} 
+                            onChange={() => handleToggleSelect(item.id)} 
+                            className="peer w-5 h-5 cursor-pointer appearance-none rounded border-2 border-gray-500 checked:bg-blue-500 checked:border-blue-500 transition-all"
+                        />
+                        <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white left-[3px]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-grow flex flex-col sm:flex-row sm:items-center gap-2 font-serif text-gray-200 text-base">
+                        <span className="font-medium tracking-wide opacity-80 select-all">{item.original}</span>
+                        <span className="text-gray-500 hidden sm:inline text-xs">➜</span>
+                        <span className="font-bold text-white bg-[#0f172a] px-3 py-1.5 rounded-lg border border-gray-700 shadow-sm select-all">
+                            {item.translated}
+                        </span>
+                    </div>
+
+                    {/* Delete Icon */}
+                    <button 
+                        onClick={() => { setGlossaryItemToDeleteId(item.id); setIsConfirmDeleteGlossaryOpen(true); }} 
+                        className="text-gray-500 hover:text-red-400 p-2 rounded-lg hover:bg-white/5 transition-colors"
+                        title="Hapus item ini"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+            ))}
+            {filteredGlossary.length === 0 && (
+                <div className="text-center py-8 text-subtle text-sm italic opacity-50 border-2 border-dashed border-border rounded-xl">
+                    Belum ada kata di glosarium.
+                </div>
+            )}
+        </div>
+      </section>
+
+      {/* DATA MANAGEMENT & AI CONFIG (EXISTING) */}
       <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-charcoal">
          <h2 className="text-xl font-serif font-bold text-charcoal">💾 Penyimpanan Lokal</h2>
-         
          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <button onClick={handleExportProject} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
@@ -268,7 +396,6 @@ const SettingsPage: React.FC = () => {
                  </div>
                  <span className="text-2xl">📤</span>
              </button>
-
              <button onClick={handleImportClick} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
                      <p className="font-bold text-charcoal">Impor Backup (.json)</p>
@@ -278,7 +405,6 @@ const SettingsPage: React.FC = () => {
              </button>
              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json" />
          </div>
-
          <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-4">
              <div>
                 <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Reset Database Cache?</p>
@@ -295,7 +421,6 @@ const SettingsPage: React.FC = () => {
                  {isCleaningCache ? 'Membersihkan...' : 'Reset Cache'}
              </button>
          </div>
-
          <div className="pt-4 border-t border-border flex justify-between items-center">
              <button onClick={handleResetApp} className="text-[10px] font-bold text-red-400 hover:text-red-600 underline">
                  HAPUS SEMUA DATA & RESET APLIKASI
@@ -304,7 +429,7 @@ const SettingsPage: React.FC = () => {
          </div>
       </section>
 
-      {/* AI CONFIGURATION */}
+      {/* AI CONFIGURATION (EXISTING) */}
       <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-charcoal">
         <h2 className="text-xl font-serif font-bold text-charcoal pb-2 border-b border-gray-100">⚙️ Konfigurasi AI</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -327,37 +452,6 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <input type="password" placeholder="Tempel API Key di sini..." value={settings.apiKeys[settings.activeProvider] || ''} onChange={(e) => updateApiKey(settings.activeProvider, e.target.value)} className="w-full p-4 rounded-2xl bg-card border-2 border-transparent focus:border-accent outline-none text-sm font-mono shadow-inner-light" />
             </div>
-        </div>
-      </section>
-
-      {/* GLOSSARY */}
-      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 pb-4">
-            <div>
-                <h2 className="text-xl font-serif font-bold text-charcoal">📖 Glosarium</h2>
-                <p className="text-subtle text-xs mt-1">Glosarium akan digunakan secara konsisten oleh AI saat menerjemahkan.</p>
-            </div>
-            {selectedIds.size > 0 && (
-                <button onClick={() => setIsConfirmBulkDeleteOpen(true)} className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg animate-in fade-in transition-all">Hapus Terpilih ({selectedIds.size})</button>
-            )}
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3 bg-paper/50 p-3 rounded-2xl border border-border">
-          <input type="text" placeholder="Kata Asli" className="flex-grow p-3 rounded-xl bg-card border border-transparent text-sm outline-none" value={newWord} onChange={(e) => setNewWord(e.target.value)} />
-          <input type="text" placeholder="Terjemahan" className="flex-grow p-3 rounded-xl bg-card border border-transparent text-sm outline-none" value={newTrans} onChange={(e) => setNewTrans(e.target.value)} />
-          <button onClick={() => { if(newWord && newTrans) { addGlossaryItem(newWord, newTrans); setNewWord(''); setNewTrans(''); }}} className="bg-charcoal text-paper px-6 py-3 rounded-xl font-bold shadow-md">Tambah</button>
-        </div>
-        <div className="max-h-[400px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-            {filteredGlossary.map(item => (
-                <div key={item.id} className="flex items-start gap-3 p-3 rounded-2xl border bg-card border-transparent hover:border-border transition-all">
-                    <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => { const next = new Set(selectedIds); if(next.has(item.id)) next.delete(item.id); else next.add(item.id); setSelectedIds(next); }} className="w-4 h-4 mt-1 rounded text-accent cursor-pointer" />
-                    <div className="flex-grow flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-serif text-charcoal text-sm md:text-base">
-                        <span className="font-medium text-gray-500">{item.original}</span>
-                        <span className="text-subtle hidden sm:inline">&rarr;</span>
-                        <span className="font-bold text-charcoal bg-gray-100 px-2 py-0.5 rounded">{item.translated}</span>
-                    </div>
-                    <button onClick={() => { setGlossaryItemToDeleteId(item.id); setIsConfirmDeleteGlossaryOpen(true); }} className="text-subtle hover:text-red-500 transition-colors">🗑</button>
-                </div>
-            ))}
         </div>
       </section>
 
