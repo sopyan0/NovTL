@@ -4,9 +4,11 @@
  * Copyright (c) 2025 NovTL Studio. All Rights Reserved.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'; 
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'; 
 import ReactDOM from 'react-dom';
 import JSZip from 'jszip';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'; 
+import { Clipboard } from '@capacitor/clipboard';
 import { SavedTranslation, EpubChapter } from '../types'; 
 import { translateTextStream, hasValidApiKey } from '../services/llmService';
 import { LANGUAGES, DEFAULT_SETTINGS } from '../constants';
@@ -17,6 +19,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { generateId } from '../utils/id';
 import { parseEpub, loadChapterText } from '../utils/epubParser';
 import { putItem, getItem, deleteItem } from '../utils/idb';
+import { isCapacitorNative } from '../utils/fileSystem';
 
 // TOAST COMPONENT
 const Toast: React.FC<{ message: string; show: boolean; onClose: () => void }> = ({ message, show, onClose }) => {
@@ -53,8 +56,9 @@ const TranslationToolbar: React.FC<{
   activeProvider: string;
   mode: 'standard' | 'high_quality';
   onModeChange: (m: 'standard' | 'high_quality') => void;
+  saveStatus: 'saved' | 'saving' | 'unsaved';
   t: (key: string) => string;
-}> = ({ sourceLang, targetLang, onSourceChange, onTargetChange, onSwap, hasApiKey, onToggleApi, onTogglePrompt, onLoadEpub, showPrompt, showApi, activeProvider, mode, onModeChange, t }) => (
+}> = ({ sourceLang, targetLang, onSourceChange, onTargetChange, onSwap, hasApiKey, onToggleApi, onTogglePrompt, onLoadEpub, showPrompt, showApi, activeProvider, mode, onModeChange, saveStatus, t }) => (
   <div className="glass-card p-2 md:p-3 rounded-3xl z-30 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 shadow-sm hover:shadow-md">
     <div className="flex items-center gap-2 bg-paper/50 dark:bg-black/20 p-1.5 rounded-2xl border border-border/40 shadow-inner-light w-full md:w-auto overflow-x-auto">
         <select value={sourceLang} onChange={(e) => onSourceChange(e.target.value)} className="w-full md:w-32 appearance-none bg-transparent hover:bg-card pl-3 pr-6 py-2 rounded-xl text-sm font-semibold text-charcoal outline-none cursor-pointer transition-colors focus:bg-card">
@@ -69,6 +73,12 @@ const TranslationToolbar: React.FC<{
     </div>
 
     <div className="flex gap-2 w-full md:w-auto justify-end items-center">
+        {/* Save Status Indicator */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-xl">
+             <div className={`w-2 h-2 rounded-full ${saveStatus === 'saving' ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
+             <span className="text-[10px] font-bold text-subtle uppercase tracking-wider">{saveStatus === 'saving' ? 'Saving...' : 'Saved'}</span>
+        </div>
+
         <select value={mode} onChange={(e) => onModeChange(e.target.value as any)} className={`appearance-none pl-3 pr-8 py-2 rounded-2xl text-xs font-bold border cursor-pointer outline-none transition-all ${mode === 'high_quality' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 border-indigo-100 dark:border-indigo-800 shadow-sm' : 'bg-card text-subtle border-border hover:border-gray-300 dark:hover:border-gray-600'}`}>
             <option value="standard">⚡ Standard</option>
             <option value="high_quality">💎 Novel (2-Pass)</option>
@@ -97,6 +107,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     translatedText, setTranslatedText,
     epubChapters, setEpubChapters,
     activeChapterId, setActiveChapterId,
+    isRestoring, saveStatus
   } = useEditor();
   const { t } = useLanguage();
 
@@ -124,30 +135,39 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const abortControllerRef = useRef<AbortController | null>(null);
   const outputBufferRef = useRef(''); 
   const lastUpdateRef = useRef(0);
-  const translationContainerRef = useRef<HTMLDivElement>(null);
   const portalRoot = document.getElementById('portal-root');
+  
+  // Virtuoso Refs
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const translationContainerRef = useRef<HTMLDivElement>(null);
   
   const hasApiKey = hasValidApiKey(settings);
   const glossaryCount = activeProject.glossary.length;
   const activeModel = settings.activeProvider;
 
-  // --- RESTORE SCROLL POSITION (AUTO-RESUME) ---
-  useLayoutEffect(() => {
-     if (translatedText && translationContainerRef.current) {
-         const savedPos = localStorage.getItem('editor_scroll_pos');
-         if (savedPos) {
-             const pos = parseInt(savedPos, 10);
-             if (!isNaN(pos)) {
-                 translationContainerRef.current.scrollTop = pos;
-             }
-         }
-     }
-  }, [translatedText, isTranslationFullscreen]);
+  // Memoize paragraphs for Virtuoso
+  const translatedParagraphs = useMemo(() => {
+    if (!translatedText) return [];
+    return translatedText.split('\n');
+  }, [translatedText]);
 
-  // --- SAVE SCROLL POSITION (REALTIME) ---
-  const handleEditorScroll = (e: React.UIEvent<HTMLDivElement>) => {
-      const target = e.currentTarget;
-      localStorage.setItem('editor_scroll_pos', target.scrollTop.toString());
+  // --- RESTORE SCROLL POSITION (AUTO-RESUME) ---
+  useEffect(() => {
+    if (translatedText && !isLoading && virtuosoRef.current) {
+        const savedPos = localStorage.getItem('editor_scroll_index');
+        if (savedPos) {
+            const index = parseInt(savedPos, 10);
+            if (!isNaN(index)) {
+                setTimeout(() => {
+                    virtuosoRef.current?.scrollToIndex({ index, align: 'start' });
+                }, 100);
+            }
+        }
+    }
+  }, [isRestoring]);
+
+  const handleScroll = (index: number) => {
+      localStorage.setItem('editor_scroll_index', index.toString());
   };
 
   // --- PERSISTENCE LOGIC: EPUB RECOVERY ---
@@ -202,33 +222,48 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     }
   };
 
-  const handleClearSource = () => {
-      setSourceText('');
-      setTranslatedText('');
-      outputBufferRef.current = '';
-      setActiveChapterId(null);
-      localStorage.removeItem('editor_scroll_pos'); // Reset scroll memory
-      localStorage.removeItem('novtl_editor_source'); // Clear text storage
-      localStorage.removeItem('novtl_editor_target');
-      if (isLoading) handleStop();
+  const handleClearSource = async () => {
+      if(confirm("Apakah Anda yakin ingin menghapus semua teks di editor? Tindakan ini tidak dapat dibatalkan.")) {
+        setSourceText('');
+        setTranslatedText('');
+        outputBufferRef.current = '';
+        setActiveChapterId(null);
+        localStorage.removeItem('editor_scroll_index');
+        
+        await deleteItem('app_state', 'editor_source_content');
+        await deleteItem('app_state', 'editor_target_content');
+
+        if (isLoading) handleStop();
+      }
   };
 
   const handlePasteSource = async () => {
       try {
-          const text = await navigator.clipboard.readText();
-          setSourceText(text);
-          showToastNotification("Teks berhasil ditempel!");
+          let text = '';
+          // Gunakan Native Clipboard jika di Android/iOS untuk bypass permission browser
+          if (isCapacitorNative()) {
+              const { type, value } = await Clipboard.read();
+              text = value;
+          } else {
+              // Web Fallback
+              text = await navigator.clipboard.readText();
+          }
+
+          if (text) {
+            setSourceText(text);
+            showToastNotification("Teks berhasil ditempel!");
+          } else {
+             showToastNotification("Clipboard kosong!");
+          }
       } catch (err) {
           console.error("Paste failed", err);
-          alert("Gagal menempel. Izin clipboard mungkin ditolak.");
+          alert("Gagal menempel. Pastikan aplikasi memiliki izin clipboard di pengaturan Android.");
       }
   };
 
-  // --- UNIVERSAL FILE HANDLER (DRAG & DROP + INPUT) ---
   const processFile = async (file: File) => {
       const fileName = file.name.toLowerCase();
       
-      // 1. Handle EPUB
       if (fileName.endsWith('.epub')) {
         try {
             const zip = new JSZip();
@@ -239,7 +274,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             const { chapters } = await parseEpub(file);
             setEpubChapters(chapters);
             
-            // Simpan File ke IDB agar tidak hilang
             await putItem('epub_files', { id: 'active_epub_file', blob: file });
             
             setIsEpubModalOpen(true);
@@ -248,7 +282,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             setError(`Gagal memuat EPUB: ${e.message}`);
         }
       } 
-      // 2. Handle TXT
       else if (fileName.endsWith('.txt')) {
           try {
               const text = await file.text();
@@ -273,7 +306,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const handleDragLeave = useCallback((e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      // Mencegah flickering jika drag ke child element
       if (e.currentTarget.contains(e.relatedTarget as Node)) return;
       setIsDragging(false);
   }, []);
@@ -290,7 +322,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       }
   }, []);
 
-  // --- EPUB HANDLERS (LEGACY BUTTON) ---
   const triggerEpubUpload = () => {
       if (epubChapters.length > 0) {
           setIsEpubModalOpen(true);
@@ -313,7 +344,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           setSourceText(text);
           setTranslatedText('');
           setActiveChapterId(chapter.id);
-          localStorage.removeItem('editor_scroll_pos'); // Reset scroll for new chapter
+          localStorage.removeItem('editor_scroll_index'); 
           setIsEpubModalOpen(false);
           showToastNotification(`Bab dimuat: ${chapter.title}`);
       } catch (e) {
@@ -349,7 +380,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           (chunk) => {
               outputBufferRef.current += chunk;
               const now = Date.now();
-              if (now - lastUpdateRef.current > 150) { 
+              if (now - lastUpdateRef.current > 100) { 
                   setTranslatedText(outputBufferRef.current);
                   lastUpdateRef.current = now;
               }
@@ -383,13 +414,15 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   };
 
   const ReadingModeModal = () => {
-    // Restore scroll for modal as well
-    useLayoutEffect(() => {
-        if (translationContainerRef.current) {
-            const savedPos = localStorage.getItem('editor_scroll_pos');
-            if (savedPos) {
-                 translationContainerRef.current.scrollTop = parseInt(savedPos, 10);
-            }
+    const readingVirtuosoRef = useRef<VirtuosoHandle>(null);
+    
+    useEffect(() => {
+        const savedPos = localStorage.getItem('editor_scroll_index');
+        if (savedPos && readingVirtuosoRef.current) {
+             const index = parseInt(savedPos, 10);
+             if(!isNaN(index)) {
+                 setTimeout(() => readingVirtuosoRef.current?.scrollToIndex({ index, align: 'start' }), 50);
+             }
         }
     }, []);
 
@@ -401,16 +434,19 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                <button onClick={() => setIsTranslationFullscreen(false)} className="bg-charcoal text-paper w-10 h-10 rounded-full font-bold shadow-lg flex items-center justify-center cursor-pointer active:scale-95">✕</button>
             </div>
         </div>
-        <div 
-            className="flex-grow overflow-y-auto w-full h-full pt-24 px-4 md:px-0 custom-scrollbar"
-            onScroll={handleEditorScroll}
-            ref={translationContainerRef}
-        >
-            <div className="max-w-3xl mx-auto pb-24">
-               <article className="prose prose-lg md:prose-xl max-w-none font-serif leading-loose text-justify text-charcoal selection:bg-accent/20 dark:prose-invert">
-                   {translatedText.split('\n').map((para, i) => para.trim() ? <p key={i} className="mb-6 indent-8">{para}</p> : <br key={i}/>)}
-               </article>
-            </div>
+        <div className="flex-grow w-full h-full pt-24 px-4 md:px-0">
+             <Virtuoso 
+                ref={readingVirtuosoRef}
+                data={translatedParagraphs}
+                className="custom-scrollbar h-full"
+                itemContent={(index, item) => (
+                    <div className="max-w-3xl mx-auto px-4 md:px-0">
+                         {item.trim() ? <p className="mb-6 indent-8 font-serif leading-loose text-lg md:text-xl text-justify text-charcoal">{item}</p> : <br/>}
+                    </div>
+                )}
+                rangeChanged={({ startIndex }) => handleScroll(startIndex)}
+                increaseViewportBy={500}
+             />
         </div>
     </div>
     );
@@ -474,7 +510,9 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
         onSwap={handleSwapLanguages} hasApiKey={hasApiKey} showApi={showApiKeyInput} showPrompt={showPromptInput}
         onToggleApi={() => setShowApiKeyInput(!showApiKeyInput)} onTogglePrompt={() => setShowPromptInput(!showPromptInput)}
         onLoadEpub={triggerEpubUpload} activeProvider={settings.activeProvider}
-        mode={settings.translationMode || 'standard'} onModeChange={(m) => updateSettings({ translationMode: m })} t={t}
+        mode={settings.translationMode || 'standard'} onModeChange={(m) => updateSettings({ translationMode: m })} 
+        saveStatus={saveStatus}
+        t={t}
       />
 
       {showApiKeyInput && (
@@ -519,7 +557,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             onDrop={handleDrop}
           >
             {/* PASTE BUTTON - MOVED INSIDE CONTAINER WITH HIGHER Z-INDEX */}
-            {!sourceText && !isDragging && (
+            {!sourceText && !isDragging && !isRestoring && (
                 <button 
                     onClick={handlePasteSource} 
                     className="absolute top-4 right-4 z-50 px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
@@ -537,22 +575,42 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
             {/* TEXTAREA (Z-INDEX 20) */}
             <textarea 
-                className={`w-full h-full p-4 md:p-6 bg-transparent outline-none resize-none text-base md:text-lg font-serif leading-loose text-charcoal custom-scrollbar relative z-20 ${!sourceText ? 'opacity-0' : 'opacity-100'}`} 
+                className="w-full h-full p-4 md:p-6 bg-transparent outline-none resize-none text-base md:text-lg font-serif leading-loose text-charcoal custom-scrollbar relative z-20 placeholder-gray-400/50" 
+                placeholder={isDragging ? "" : (isRestoring ? "Memuat novel Anda..." : "Mulai ketik di sini...")}
                 value={sourceText} 
-                onChange={(e) => setSourceText(e.target.value)} 
+                onChange={(e) => setSourceText(e.target.value)}
+                disabled={isRestoring}
             />
 
-            {/* EMPTY STATE (Z-INDEX 10) */}
-            {!sourceText && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center pointer-events-none opacity-50">
+            {/* EMPTY STATE WITH UPLOAD BUTTON (Z-INDEX 10) */}
+            {!sourceText && !isRestoring && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center">
                     <span className="text-5xl mb-4 grayscale opacity-50">📝</span>
-                    <p className="font-serif text-lg text-charcoal font-bold mb-2">Ketik, Tempel, atau Tarik File</p>
-                    <p className="text-xs text-subtle max-w-[200px]">Drag & Drop file novel (.txt / .epub) langsung ke kotak ini.</p>
+                    <p className="font-serif text-lg text-charcoal font-bold mb-2">Editor Kosong</p>
+                    <p className="text-xs text-subtle max-w-[250px] mb-4">
+                        Ketik langsung, tempel teks, atau seret file novel Anda ke sini.
+                    </p>
+                    
+                    {/* Explicit Upload Button requested by user */}
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                        className="relative z-30 px-6 py-2.5 bg-charcoal text-paper rounded-xl font-bold text-sm shadow-lg hover:bg-black transition-transform active:scale-95 flex items-center gap-2"
+                    >
+                        <span>📂</span> Upload File (.txt / .epub)
+                    </button>
+                </div>
+            )}
+            
+            {isRestoring && !sourceText && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-card/50 backdrop-blur-sm">
+                    <div className="flex flex-col items-center">
+                        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mb-2"></div>
+                        <span className="text-xs font-bold text-subtle">Memulihkan Sesi...</span>
+                    </div>
                 </div>
             )}
           </div>
 
-          {/* MOVED: Clear Button is now after the container with high z-index to stay on top */}
           {sourceText && (
              <button onClick={handleClearSource} className="absolute -top-3 right-4 z-50 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm">✕</button>
           )}
@@ -565,26 +623,39 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             </div>
 
             <div 
-                ref={translationContainerRef}
-                onScroll={handleEditorScroll}
-                className="w-full h-[400px] md:h-[500px] lg:h-[600px] p-4 md:p-6 rounded-[2rem] border-2 border-transparent bg-card shadow-soft overflow-y-auto custom-scrollbar relative transition-all"
+                className="w-full h-[400px] md:h-[500px] lg:h-[600px] rounded-[2rem] border-2 border-transparent bg-card shadow-soft overflow-hidden relative transition-all"
             >
               {translatedText ? (
-                <article className="prose prose-lg max-w-none font-serif leading-loose text-charcoal text-justify dark:prose-invert">
-                {translatedText.split('\n').map((para, i) => (
-                    <p key={`para-${i}`} className="mb-4 min-h-[1.5em]">{para.trim() || '\u00A0'}</p>
-                ))}
-                {isLoading && <span className="inline-block w-2 h-5 bg-accent ml-1 animate-pulse"></span>}
-                </article>
+                // VIRTUOSO IMPLEMENTATION FOR PERFORMANCE
+                <Virtuoso 
+                    ref={virtuosoRef}
+                    data={translatedParagraphs}
+                    className="custom-scrollbar h-full px-4 md:px-6 py-4"
+                    followOutput={isLoading ? 'smooth' : false}
+                    itemContent={(index, item) => (
+                        <p className="mb-4 min-h-[1.5em] font-serif leading-loose text-charcoal text-justify prose-lg dark:prose-invert">
+                            {item.trim() || '\u00A0'}
+                        </p>
+                    )}
+                    rangeChanged={({ startIndex }) => handleScroll(startIndex)}
+                    increaseViewportBy={500} // Pre-render buffer
+                />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-300 font-serif italic text-center p-4">
                   {isLoading ? <div className="text-5xl animate-bounce">🍡</div> : <span className="text-6xl mb-6 opacity-20">📖</span>}
                   <span className="text-lg">{isLoading ? t('editor.waiting') : t('editor.emptyState')}</span>
                 </div>
               )}
+              {/* Loading Indicator Overlay if generating but virtuoso is handling scroll */}
+              {isLoading && translatedText && (
+                  <div className="absolute bottom-4 right-4 z-20">
+                      <div className="bg-accent text-white text-xs px-3 py-1 rounded-full animate-pulse shadow-md">
+                          Generating...
+                      </div>
+                  </div>
+              )}
             </div>
 
-            {/* MOVED: Fullscreen Button after container */}
             {translatedText && (
                 <button onClick={() => setIsTranslationFullscreen(true)} className="absolute -top-3 right-4 z-50 p-2 bg-indigo-50 border border-indigo-100 text-accent rounded-full hover:bg-accent hover:text-white transition-all shadow-sm">🔍</button>
             )}

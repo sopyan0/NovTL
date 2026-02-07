@@ -1,5 +1,6 @@
 
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { putItem, getItem, deleteItem } from './idb';
 
 declare global {
@@ -26,10 +27,14 @@ export const isCapacitorNative = () => {
 
 export const fsWrite = async (filename: string, content: string | object): Promise<void> => {
     const stringData = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    
+    // 1. Simpan ke Cache (IDB) dulu agar UI cepat
     await putItem('fs_cache', { id: filename, content: stringData });
 
+    // 2. Simpan ke File Fisik (Storage Persisten)
     if (isElectron()) {
-        await window.novtlAPI!.write(filename, stringData);
+        const res = await window.novtlAPI!.write(filename, stringData);
+        if (!res.success) throw new Error(res.error || "Failed to write to disk");
     } else if (isCapacitorNative()) {
         try {
             await Filesystem.writeFile({
@@ -39,8 +44,11 @@ export const fsWrite = async (filename: string, content: string | object): Promi
                 encoding: Encoding.UTF8,
                 recursive: true
             });
-        } catch (e) {
+        } catch (e: any) {
             console.error("FS Write Error:", e);
+            // CRITICAL: Jangan diam saja jika gagal tulis file!
+            // Lempar error agar UI tahu bahwa penyimpanan fisik gagal.
+            throw new Error(`Gagal menyimpan ke penyimpanan internal: ${e.message}. Pastikan izin penyimpanan aktif.`);
         }
     }
 };
@@ -82,7 +90,9 @@ export const fsDelete = async (filename: string): Promise<void> => {
 };
 
 /**
- * FIXED: Download ke folder 'Download' Android (Directory.External)
+ * FIXED: Gunakan 'Share API' untuk Android.
+ * Ini memicu dialog sistem "Simpan ke..." atau "Kirim ke...", 
+ * yang 100% berhasil di Android 11+ tanpa masalah permission Download folder.
  */
 export const triggerDownload = async (filename: string, blob: Blob) => {
     if (isCapacitorNative()) {
@@ -91,31 +101,29 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
         reader.onloadend = async () => {
             const base64data = (reader.result as string).split(',')[1];
             try {
-                // 'Directory.External' pada Android mengarah ke root /storage/emulated/0/
-                // Kita buat folder 'Download/NovTL_Export' agar terlihat di File Manager
-                await Filesystem.writeFile({
-                    path: `Download/NovTL_Export/${filename}`,
+                // 1. Tulis ke Cache sementara
+                const tempPath = `temp_export/${filename}`;
+                const writeResult = await Filesystem.writeFile({
+                    path: tempPath,
                     data: base64data,
-                    directory: Directory.External,
+                    directory: Directory.Cache, // Gunakan Cache directory yang selalu boleh ditulis
                     recursive: true
                 });
-                alert(`✅ BERHASIL!\n\nFile tersimpan di:\n📁 Folder Download > NovTL_Export\n\nNama file: ${filename}`);
-            } catch (e) {
-                // Fallback jika permission External Storage gagal
-                try {
-                    await Filesystem.writeFile({
-                        path: `NovTL_Export/${filename}`,
-                        data: base64data,
-                        directory: Directory.Documents,
-                        recursive: true
-                    });
-                    alert(`✅ Tersimpan di Documents!\n\nKarena izin folder Download ditolak, file disimpan di:\n📁 Documents > NovTL_Export`);
-                } catch (e2) {
-                    alert("❌ Gagal mendownload. Harap aktifkan izin penyimpanan di pengaturan aplikasi.");
-                }
+
+                // 2. Panggil Share Dialog
+                await Share.share({
+                    title: 'Export NovTL',
+                    text: `Berikut adalah file export Anda: ${filename}`,
+                    files: [writeResult.uri],
+                    dialogTitle: 'Simpan atau Bagikan File'
+                });
+
+            } catch (e: any) {
+                alert(`Export Error: ${e.message}`);
             }
         };
     } else {
+        // Desktop / Web behavior
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -128,8 +136,17 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
 export const initFileSystem = async () => {
     if (isCapacitorNative()) {
         try {
+            // REQUEST PERMISSION SECARA EKSPLISIT SAAT INIT
+            const perm = await Filesystem.checkPermissions();
+            if (perm.publicStorage !== 'granted') {
+                await Filesystem.requestPermissions();
+            }
+
+            // Buat folder kerja
             await Filesystem.mkdir({ path: 'NovTL', directory: Directory.Documents, recursive: true });
             await Filesystem.mkdir({ path: 'NovTL/chapters', directory: Directory.Documents, recursive: true });
-        } catch (e) {}
+        } catch (e) {
+            console.warn("Init FS Warning:", e);
+        }
     }
 };

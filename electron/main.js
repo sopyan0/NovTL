@@ -12,6 +12,14 @@ if (!fs.existsSync(BASE_DIR)) {
     fs.mkdirSync(BASE_DIR, { recursive: true });
 }
 
+// SECURITY: Validasi Path untuk mencegah Traversal Attack (../..)
+const isSafePath = (targetPath) => {
+    // Resolve path absolut dari input
+    const resolvedPath = path.resolve(BASE_DIR, targetPath);
+    // Pastikan path yang di-resolve masih berada di dalam BASE_DIR
+    return resolvedPath.startsWith(BASE_DIR);
+};
+
 function createWindow() {
     // Determine icon path based on environment
     // In production (asar), __dirname is inside the archive. The icon is unpacked or at root.
@@ -60,6 +68,11 @@ app.on('window-all-closed', function () {
 // 1. Tulis File
 ipcMain.handle('fs-write', async (event, { filename, content }) => {
     try {
+        // Security Check
+        if (!isSafePath(filename)) {
+            throw new Error("Access Denied: Invalid file path.");
+        }
+
         const filePath = path.join(BASE_DIR, filename);
         const dir = path.dirname(filePath);
         
@@ -78,6 +91,9 @@ ipcMain.handle('fs-write', async (event, { filename, content }) => {
 // 2. Baca File
 ipcMain.handle('fs-read', async (event, { filename }) => {
     try {
+        // Security Check
+        if (!isSafePath(filename)) return null;
+
         const filePath = path.join(BASE_DIR, filename);
         if (!fs.existsSync(filePath)) return null;
         const data = fs.readFileSync(filePath, 'utf8');
@@ -90,6 +106,9 @@ ipcMain.handle('fs-read', async (event, { filename }) => {
 // 3. List File di Folder
 ipcMain.handle('fs-list', async (event, { folder }) => {
     try {
+        // Security Check
+        if (!isSafePath(folder || '')) return [];
+
         const dirPath = path.join(BASE_DIR, folder || '');
         if (!fs.existsSync(dirPath)) return [];
         const files = fs.readdirSync(dirPath);
@@ -102,6 +121,11 @@ ipcMain.handle('fs-list', async (event, { folder }) => {
 // 4. Hapus File
 ipcMain.handle('fs-delete', async (event, { filename }) => {
     try {
+        // Security Check
+        if (!isSafePath(filename)) {
+            return { success: false, error: "Access Denied" };
+        }
+
         const filePath = path.join(BASE_DIR, filename);
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);

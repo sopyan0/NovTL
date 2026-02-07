@@ -124,11 +124,12 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleClearCache = async () => {
-      if(confirm("Hapus cache database? Ini akan mempercepat aplikasi jika terasa berat. File asli Anda di folder Documents TETAP AMAN.")) {
+      if(confirm("PERINGATAN: Tindakan ini akan menghapus database lokal (IndexedDB) dan memuat ulang data dari File Penyimpanan Fisik.\n\nJIKA PERMISSION ANDROID ANDA BERMASALAH SEBELUMNYA, DATA YANG BELUM TERSIMPAN FISIK BISA HILANG.\n\nLanjutkan?")) {
           setIsCleaningCache(true);
           await clearCacheOnly();
           setIsCleaningCache(false);
-          alert("Cache berhasil dibersihkan! 🍡");
+          alert("Cache Database dibersihkan. Aplikasi akan mencoba memuat ulang data dari file fisik.");
+          window.location.reload();
       }
   }
 
@@ -151,12 +152,12 @@ const SettingsPage: React.FC = () => {
             translations: translations
         };
         const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Backup-${project.name.replace(/\s+/g, '_')}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+        // Menggunakan nama file yang aman
+        const safeName = project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        // File system handler (utils/fileSystem.ts) sekarang menggunakan Share API di Android
+        // yang akan memicu dialog "Save as" atau share sheet.
+        const { triggerDownload } = await import('../utils/fileSystem');
+        await triggerDownload(`backup_${safeName}.json`, blob);
       } catch (e) {
         alert("Export gagal.");
       }
@@ -280,15 +281,18 @@ const SettingsPage: React.FC = () => {
 
          <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-4">
              <div>
-                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Optimasi Memori?</p>
-                <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">Hapus cache database (IndexedDB) untuk melegakan memori aplikasi.</p>
+                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Reset Database Cache?</p>
+                <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">
+                    Akan menghapus "memori cepat" aplikasi dan memaksa baca ulang dari file fisik. 
+                    <strong className="block mt-1">Gunakan hanya jika data terasa tidak sinkron.</strong>
+                </p>
              </div>
              <button 
                 onClick={handleClearCache} 
                 disabled={isCleaningCache}
                 className="bg-indigo-600 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 disabled:opacity-50"
              >
-                 {isCleaningCache ? 'Membersihkan...' : 'Bersihkan Cache'}
+                 {isCleaningCache ? 'Membersihkan...' : 'Reset Cache'}
              </button>
          </div>
 

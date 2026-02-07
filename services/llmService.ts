@@ -40,43 +40,65 @@ export const hasValidApiKey = (settings: AppSettings): boolean => {
 const mapAIError = (error: any): string => {
   const msg = error.message || String(error);
   if (msg.includes('401') || msg.includes('API key not valid')) return "Invalid API Key. Please check your Settings.";
-  if (msg.includes('429') || msg.includes('Quota exceeded')) return "API Quota Exceeded or Rate Limited. Please wait a moment.";
+  if (msg.includes('429') || msg.includes('Quota exceeded')) return "API Quota Exceeded. Please wait a moment or check your plan.";
   if (msg.includes('503') || msg.includes('Overloaded')) return "AI Server is overloaded. Try again in 1 minute.";
   if (msg.includes('AbortedByUser')) return "Process stopped by user.";
+  if (msg.includes('TokenLimit')) return "Input too long for this model. Try shortening the chapter.";
   return `AI Error: ${msg.slice(0, 50)}...`;
+};
+
+// --- HELPER: TOKENIZER ESTIMATION ---
+const estimateTokens = (text: string): number => {
+    // Estimasi kasar: 1 Token ~= 4 Karakter untuk Inggris, bisa lebih untuk bahasa lain.
+    // Kita pakai pembagi 3.5 untuk buffer aman.
+    return Math.ceil(text.length / 3.5);
 };
 
 // --- HELPER: SMART CHUNKING & CONTEXT ---
 
-const splitTextByParagraphs = (text: string, maxLength: number = 3500): string[] => {
-  if (text.length <= maxLength) return [text];
+const splitTextByParagraphs = (text: string, maxTokens: number = 3000): string[] => {
+  // Konversi maxTokens ke estimasi karakter
+  const maxChars = maxTokens * 3.5; 
+  
+  if (text.length <= maxChars) return [text];
+  
   const chunks: string[] = [];
   let currentChunk = "";
   const paragraphs = text.split('\n');
+  
   for (const para of paragraphs) {
-    if (para.length > maxLength) {
+    const paraLen = para.length;
+    
+    // Jika satu paragraf sendiri sudah melebihi batas, kita harus memecahnya (Hard Split)
+    if (paraLen > maxChars) {
         if (currentChunk) {
             chunks.push(currentChunk.trim());
             currentChunk = "";
         }
+        
         let i = 0;
-        while (i < para.length) {
-            chunks.push(para.slice(i, i + maxLength));
-            i += maxLength;
+        while (i < paraLen) {
+            chunks.push(para.slice(i, i + maxChars));
+            i += maxChars;
         }
-    } else if ((currentChunk.length + para.length) < maxLength) {
-      currentChunk += para + '\n';
-    } else {
+    } 
+    // Jika menambah paragraf ini akan melebihi batas chunk
+    else if ((currentChunk.length + paraLen) > maxChars) {
       chunks.push(currentChunk.trim());
       currentChunk = para + '\n';
+    } 
+    // Tambahkan ke chunk saat ini
+    else {
+      currentChunk += para + '\n';
     }
   }
   if (currentChunk) chunks.push(currentChunk.trim());
+  
   return chunks.filter(c => c.length > 0);
 };
 
 const getSmartSnippet = (text: string, maxLen: number = 1000): string => {
-    if (!text) return "(Empty)";
+    if (!text) return "(KOSONG)";
     if (text.length <= maxLen) return text;
     const headLen = Math.floor(maxLen * 0.6);
     const tailLen = Math.floor(maxLen * 0.4);
@@ -96,6 +118,11 @@ const generateTextSimple = async (
     systemInstruction: string,
     config: AIClientConfig
 ): Promise<string> => {
+    // Safety Check
+    if (estimateTokens(prompt + systemInstruction) > 1000000) { // Limit absurd untuk flash
+         throw new Error("TokenLimit: Input text is way too huge even for Gemini Flash.");
+    }
+
     if (config.provider === 'Gemini') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({
@@ -127,7 +154,6 @@ const generateTextSimple = async (
 };
 
 // --- CORE GENERATION (TRANSLATION ENGINE) ---
-
 export const translateTextStream = async (
   text: string, 
   settings: AppSettings, 
@@ -149,7 +175,7 @@ export const translateTextStream = async (
     ? new RegExp(`(${glossaryKeys.map(escapeRegExp).join('|')})`, 'gi')
     : null;
 
-  const chunks = splitTextByParagraphs(text, 3500); 
+  const chunks = splitTextByParagraphs(text, 2500); 
   let fullText = "";
   let previousContextSource = ""; 
 
@@ -184,6 +210,11 @@ export const translateTextStream = async (
                 if (mode === 'high_quality') {
                     const draftSystem = `Role: Translator. Task: Translate STRICTLY to ${targetLang}. Focus on accuracy and meaning.`;
                     const draftPrompt = `${glossaryText}${contextPrompt}\n[SOURCE]\n${chunk}`;
+                    
+                    if (estimateTokens(draftSystem + draftPrompt) > 120000) { 
+                        throw new Error("TokenLimit: Chunk is too complex even after splitting.");
+                    }
+
                     const draftResult = await generateTextSimple(draftPrompt, draftSystem, config);
                     if (signal?.aborted) throw new Error('AbortedByUser');
 
@@ -192,6 +223,10 @@ export const translateTextStream = async (
                 } else {
                     systemInstruction = `Role: Professional Novel Translator. Target: ${targetLang}. Style: ${instruction}. Rules: 1. Translate ONLY [CURRENT SOURCE]. 2. No glossary/context in output.`;
                     promptToStream = `${glossaryText}${contextPrompt}\n[CURRENT SOURCE]\n${chunk}`;
+                }
+                
+                if (estimateTokens(systemInstruction + promptToStream) > 120000) {
+                     throw new Error("TokenLimit: Chunk is too complex.");
                 }
 
                 if (config.provider === 'Gemini') {
@@ -246,6 +281,11 @@ export const translateTextStream = async (
           } catch (err: any) {
               lastError = err;
               if (err.message === 'AbortedByUser' || signal?.aborted) throw new Error('AbortedByUser');
+              
+              if (err.message.includes('TokenLimit') || err.message.includes('Invalid API Key')) {
+                  throw err;
+              }
+
               attempts++;
               if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts)));
           }
@@ -314,6 +354,7 @@ export const chatWithAssistant = async (
   const config = getAIClientConfig(settings);
   if (!config.apiKey) throw new Error(`API Key for ${config.provider} not found.`);
 
+  // Glosarium Summary untuk prompt
   const glossary = project.glossary || [];
   const glossarySummary = glossary.length > 500
     ? glossary.slice(0, 500).map(g => `${g.original}(${g.translated})`).join(", ") + `... (+${glossary.length - 500} others)`
@@ -324,31 +365,30 @@ export const chatWithAssistant = async (
       if (forceFullContext) {
           contextInjection = `\n[FULL EDITOR CONTENT]\nSOURCE:\n${editorContext.sourceText}\n\nTRANSLATION:\n${editorContext.translatedText}\n`;
       } else {
-          contextInjection = `\n[EDITOR SNIPPET]\nSOURCE:\n${getSmartSnippet(editorContext.sourceText, 1000)}\n\nTRANSLATION:\n${getSmartSnippet(editorContext.translatedText, 1000)}\n`;
+          // Tambahkan label yang JELAS bahwa ini dari Editor Aktif (Draft)
+          contextInjection = `\n[EDITOR DRAFT - CURRENTLY EDITING]\nNOTE: Teks ini adalah Draft aktif yang sedang dikerjakan user di Editor. INI BUKAN DARI LIBRARY.\nSOURCE SNIPPET:\n${getSmartSnippet(editorContext.sourceText, 1000)}\n\nTRANSLATION SNIPPET:\n${getSmartSnippet(editorContext.translatedText, 1000)}\n`;
       }
   }
 
   const systemPromptID = `Kamu adalah Danggo🍡, Asisten Novel.
     
-    KONTEKS GLOSARIUM: [${glossarySummary}]
+    KONTEKS GLOSARIUM SAAT INI: [${glossarySummary}]
     
-    PERATURAN SANGAT KETAT:
-    1. JANGAN panggil tool 'manage_glossary' jika user hanya menyapa (Halo, Hai, dsb) atau bertanya hal umum.
-    2. HANYA panggil tool jika ada instruksi EKSPLESIT seperti "tambah kata X", "simpan glosarium", atau "hapus kata Y".
-    3. Jika user bertanya tentang isi novel, BACA 'EDITOR SNIPPET' yang diberikan.
-    4. Jawablah dengan ramah dan singkat. Fokus pada bantuan menulis.
-    5. Jika tidak yakin butuh tool, JANGAN gunakan tool. Cukup jawab dengan teks biasa.`;
+    PERATURAN PENTING:
+    1. Anda bisa melihat teks di 'EDITOR DRAFT' (teks yang sedang diedit). Jika user bertanya tentang "chapter ini", jawablah berdasarkan draft tersebut, tapi jelaskan bahwa itu dari editor yang aktif.
+    2. CEK GLOSARIUM DI ATAS DULU sebelum menyarankan penambahan kata. Jika kata sudah ada (mirip), JANGAN panggil tool 'manage_glossary'.
+    3. HANYA panggil tool jika ada instruksi EKSPLESIT (tambah/hapus).
+    4. JANGAN panggil tool 'manage_glossary' untuk sapaan.`;
 
   const systemPromptEN = `You are Danggo🍡, a Novel Assistant.
     
-    GLOSSARY: [${glossarySummary}]
+    CURRENT GLOSSARY CONTEXT: [${glossarySummary}]
     
-    STRICT RULES:
-    1. DO NOT call 'manage_glossary' for greetings (Hello, Hi) or casual chat.
-    2. ONLY use tools if user EXPLICITLY asks to "add term X", "save glossary", or "delete term Y".
-    3. Use the 'EDITOR SNIPPET' to answer questions about the current story.
-    4. Keep answers friendly and concise.
-    5. When in doubt, DO NOT call tools. Just reply with text.`;
+    IMPORTANT RULES:
+    1. You can see the 'EDITOR DRAFT' (text currently being edited). If user asks about "this chapter", answer based on that draft, but clarify it's from the active editor.
+    2. CHECK THE GLOSSARY ABOVE FIRST before suggesting additions. If a term already exists (even similar), DO NOT call 'manage_glossary'.
+    3. ONLY use tools if explicitly asked (add/delete).
+    4. DO NOT call 'manage_glossary' for greetings.`;
 
   const systemPrompt = language === 'en' ? systemPromptEN : systemPromptID;
 

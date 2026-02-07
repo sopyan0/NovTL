@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { ChatMessage, PendingAction, AddGlossaryPayload, DeleteGlossaryPayload, GlossaryActionType } from '../types';
 import { chatWithAssistant, hasValidApiKey } from '../services/llmService';
@@ -77,22 +78,17 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     saveChatToDB(msg).catch(e => console.error("Chat sync failed", e));
   }, []);
 
-  const updateMessageText = useCallback((id: string, newText: string) => {
-      setMessages(prev => {
-          const next = prev.map(m => m.id === id ? { ...m, text: newText, pendingAction: undefined } : m);
-          messagesRef.current = next;
-          return next;
-      });
-      // Update in DB
-      const updatedMsg = messagesRef.current.find(m => m.id === id);
-      if (updatedMsg) {
-          saveChatToDB({ ...updatedMsg, text: newText }).catch(e => console.error("Chat update failed", e));
-      }
-  }, []);
-
   const clearAllPendingActions = useCallback(() => {
       setMessages(prev => {
-          const next = prev.map(m => ({ ...m, pendingAction: undefined }));
+          const next = prev.map(m => {
+              if (m.pendingAction) {
+                  // FIX: Hapus pendingAction dari state dan DB agar tidak muncul lagi
+                  const { pendingAction, ...rest } = m;
+                  saveChatToDB(rest).catch(console.error); // Update DB versi bersih
+                  return rest;
+              }
+              return m;
+          });
           messagesRef.current = next;
           return next;
       });
@@ -130,6 +126,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (type === 'ADD_GLOSSARY') {
             const addPayload = payload as AddGlossaryPayload[];
+            // FIX: Normalisasi (lowercase & trim) saat cek duplikat di DB agar tidak double
             const existingOrignals = new Set(newGlossary.map(g => g.original.toLowerCase().trim()));
             
             const newItems = addPayload
@@ -141,25 +138,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     sourceLanguage: activeProject.sourceLanguage
                 }));
 
-            if (newItems.length === 0 && addPayload.length > 0) {
-                 setTimeout(() => {
-                    const dupMsg = isEnglish 
-                        ? 'Those words are already in your glossary. I won\'t add duplicates! ✨'
-                        : 'Ternyata kata tersebut sudah ada di glosarium Kakak. Danggo tidak menambahkannya lagi agar tidak duplikat ya! ✨';
-                    addMessage({ id: generateId(), role: 'model', text: dupMsg, timestamp: Date.now() });
-                 }, 300);
-                 return prevProject;
-            }
+            // Proteksi ganda: Jika setelah filter ternyata kosong (duplikat semua), jangan update state project
+            if (newItems.length === 0) return prevProject;
+
             newGlossary = [...newGlossary, ...newItems];
         } else {
-             // DELETE ACTION (FIXED LOGIC FOR DUPLICATES)
-             const confirmMsg = isEnglish
-                ? "Are you sure you want to delete these words?"
-                : "Yakin ingin menghapus kata-kata ini?";
-             
-             const confirmDelete = window.confirm(confirmMsg);
-             if (!confirmDelete) return prevProject;
-
              const deletePayload = payload as DeleteGlossaryPayload[];
              deletePayload.forEach(item => {
                  const target = item.original.toLowerCase().trim();
@@ -170,29 +153,58 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
              });
         }
         
-        const successTag = isEnglish ? "\n\n✅ *Action applied!*" : "\n\n✅ *Aksi berhasil diterapkan!*";
-        updateMessageText(messageId, targetMsg.text + successTag);
         return { ...prevProject, glossary: newGlossary };
     });
-  }, [updateProject, activeProject, updateMessageText, addMessage, settings.appLanguage]);
+
+    // FIX: Update UI Chat DAN Hapus pendingAction dari DB agar tidak muncul lagi saat reload
+    setMessages(prev => {
+        const isEnglish = settings.appLanguage === 'en';
+        const successTag = isEnglish ? "\n\n✅ *Action applied!*" : "\n\n✅ *Aksi berhasil diterapkan!*";
+        
+        const next = prev.map(m => {
+            if (m.id === messageId) {
+                // Destructure untuk membuang pendingAction selamanya
+                const { pendingAction, ...cleanMessage } = m;
+                const updatedMsg = { ...cleanMessage, text: m.text + successTag };
+                
+                // Simpan versi bersih ke DB
+                saveChatToDB(updatedMsg).catch(console.error);
+                return updatedMsg;
+            }
+            return m;
+        });
+        messagesRef.current = next;
+        return next;
+    });
+
+  }, [updateProject, activeProject, settings.appLanguage]);
 
   const cancelAction = useCallback((messageId: string) => {
-    const targetMsg = messagesRef.current.find(m => m.id === messageId);
-    if (!targetMsg) return;
-    
-    const isEnglish = settings.appLanguage === 'en';
-    const cancelTag = isEnglish ? "\n\n❌ *Action cancelled.*" : "\n\n❌ *Aksi dibatalkan.*";
+    setMessages(prev => {
+        const isEnglish = settings.appLanguage === 'en';
+        const cancelTag = isEnglish ? "\n\n❌ *Action cancelled.*" : "\n\n❌ *Aksi dibatalkan.*";
 
-    updateMessageText(messageId, targetMsg.text + cancelTag);
+        const next = prev.map(m => {
+            if (m.id === messageId) {
+                const { pendingAction, ...cleanMessage } = m;
+                const updatedMsg = { ...cleanMessage, text: m.text + cancelTag };
+                saveChatToDB(updatedMsg).catch(console.error);
+                return updatedMsg;
+            }
+            return m;
+        });
+        messagesRef.current = next;
+        return next;
+    });
     
     addMessage({
         id: generateId(),
         role: 'user',
-        text: "[SYSTEM: User cancelled the proposed action. Do not execute it.]",
+        text: "[SYSTEM: User cancelled the proposed action.]",
         isHidden: true,
         timestamp: Date.now()
     });
-  }, [updateMessageText, addMessage, settings.appLanguage]);
+  }, [addMessage, settings.appLanguage]);
 
   const processUserMessage = useCallback(async (textOverride?: string, isHiddenInfo: boolean = false, recursionDepth = 0, forceFullContext: boolean = false) => {
     const textToSend = textOverride || input;
@@ -203,13 +215,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (textToSend.trim().toLowerCase() === 'stop' || textToSend.trim().toLowerCase() === 'berhenti') {
         clearAllPendingActions();
         setInput('');
-        const stopMsg = isEnglish ? '🛑 Danggo stopped. Anything else?' : '🛑 Danggo berhenti dan reset status. Ada yang lain?';
+        const stopMsg = isEnglish ? '🛑 Danggo stopped.' : '🛑 Danggo berhenti.';
         addMessage({ id: generateId(), role: 'model', text: stopMsg, timestamp: Date.now() });
         return;
     }
 
     if (recursionDepth > 3) {
-        addMessage({ id: generateId(), role: 'model', text: '⚠️ *System Loop Detected.* Stopping context retrieval.', timestamp: Date.now() });
+        addMessage({ id: generateId(), role: 'model', text: '⚠️ *System Loop Detected.*', timestamp: Date.now() });
         setIsTyping(false);
         return;
     }
@@ -232,15 +244,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (!hasValidApiKey(settings)) {
         const errorMsg = isEnglish 
-            ? `⚠️ Sorry, I can't run because **API Key ${settings.activeProvider}** is missing. \n\nPlease enter it in **Settings** or via the 🔑 API button!`
-            : `⚠️ Maaf Kak, Danggo tidak bisa jalan karena **API Key ${settings.activeProvider}** masih kosong. \n\nSilakan masukkan kuncinya di menu **Setelan** atau lewat tombol 🔑 API di halaman utama ya!`;
-        
-        addMessage({ 
-            id: generateId(), 
-            role: 'model', 
-            text: errorMsg, 
-            timestamp: Date.now() 
-        });
+            ? `⚠️ API Key Missing.`
+            : `⚠️ Maaf Kak, Danggo tidak bisa jalan karena **API Key** kosong.`;
+        addMessage({ id: generateId(), role: 'model', text: errorMsg, timestamp: Date.now() });
         return;
     }
 
@@ -263,42 +269,32 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         if (result.type === 'READ_FULL_EDITOR_AND_REPROCESS') {
-            console.log("Danggo requesting full context...");
             await processUserMessage(textToSend, true, recursionDepth + 1, true);
             return; 
         }
 
         if (result.type === 'READ_SAVED_TRANSLATION') {
-            // ... (Same logic as before, just kept concise for XML)
             const query = result.payload.toLowerCase().trim();
             const allTranslations = await getTranslationsByProjectId(settings.activeProjectId);
             const titleMatch = allTranslations.find(t => t.name.toLowerCase().includes(query));
 
             let relevantContext = "";
-            let matchCount = 0;
-            let foundTitle = "";
-
+            
             if (titleMatch) {
-                const SAFE_LIMIT = 20000;
-                const contentPreview = titleMatch.translatedText.slice(0, SAFE_LIMIT);
-                relevantContext = `[DITEMUKAN BAB UTUH: "${titleMatch.name}"]\nISI KONTEN:\n${contentPreview}`;
-                matchCount = 1;
-                foundTitle = titleMatch.name;
+                const contentPreview = titleMatch.translatedText.slice(0, 10000);
+                relevantContext = `[DITEMUKAN BAB LIBRARY: "${titleMatch.name}"]\nISI:\n${contentPreview}`;
             } else {
-                 // Search Logic
                  const contentMatches = allTranslations.filter(t => t.translatedText.toLowerCase().includes(query));
-                 const topMatches = contentMatches.slice(0, 5);
-                 matchCount = topMatches.length;
-                 if (topMatches.length > 0) {
-                     relevantContext = topMatches.map(m => `SUMBER: **${m.name}**\nTEMUAN:\n${m.translatedText.slice(0, 500)}...`).join('\n\n');
+                 if (contentMatches.length > 0) {
+                     relevantContext = contentMatches.slice(0,3).map(m => `SUMBER: **${m.name}**\nTEMUAN:\n${m.translatedText.slice(0, 500)}...`).join('\n\n');
                  }
             }
 
-            if (matchCount > 0) {
-                const dataInjection = `[SYSTEM INFO: Danggo mencari "${result.payload}" dan menemukan data ini.]\n\n${relevantContext}`;
+            if (relevantContext) {
+                const dataInjection = `[SYSTEM INFO: Danggo mencari "${result.payload}" di Library.]\n\n${relevantContext}`;
                 await processUserMessage(dataInjection, true, recursionDepth + 1);
             } else {
-                const notFoundMsg = isEnglish ? "I searched but couldn't find it." : "Danggo mencari tapi tidak ketemu, Kak.";
+                const notFoundMsg = isEnglish ? "Not found in library." : "Tidak ditemukan di koleksi tersimpan.";
                 addMessage({ id: generateId(), role: 'model', text: notFoundMsg, timestamp: Date.now() });
             }
             return;
@@ -307,19 +303,31 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         let pendingAction: PendingAction | undefined;
         let finalMessage = result.message;
 
+        // FIX: Filter Duplikat Dini sebelum menampilkan konfirmasi ke User
         if (result.type === 'ADD_GLOSSARY') {
-             // ... (Glossary Logic Same)
             const existingOrignals = new Set(activeProject.glossary.map(g => g.original.toLowerCase().trim()));
+            
+            // Filter hanya yang belum ada di database
             const validItems = result.payload.filter(p => p.original && !existingOrignals.has(p.original.toLowerCase().trim()));
+            
             if (validItems.length > 0) {
+                // Ada item baru -> Buat Pending Action
                 pendingAction = { type: 'ADD_GLOSSARY', payload: validItems };
-            } else if (result.message.includes('tambah') || result.message.includes('add')) {
-                const dupMsg = isEnglish ? 'Duplicates detected! ✨' : 'Kata sudah ada di glosarium! ✨';
-                addMessage({ id: generateId(), role: 'model', text: dupMsg, timestamp: Date.now() });
-                setIsTyping(false);
-                return;
+                
+                // Jika sebagian duplikat, beri tahu user di pesannya
+                if (validItems.length < result.payload.length) {
+                    finalMessage += isEnglish 
+                        ? "\n(Some duplicates were automatically removed)" 
+                        : "\n(Beberapa kata duplikat otomatis dibuang)";
+                }
+            } else {
+                // Semua duplikat -> Batalkan Action & Ubah Pesan
+                finalMessage = isEnglish 
+                    ? "✨ All these words are already in your glossary! No changes needed." 
+                    : "✨ Wah, semua kata tersebut ternyata sudah ada di glosarium Kakak! Tidak ada yang perlu ditambahkan.";
             }
-        } else if (result.type === 'DELETE_GLOSSARY') {
+        } 
+        else if (result.type === 'DELETE_GLOSSARY') {
             const verifiedPayload: DeleteGlossaryPayload[] = [];
             result.payload.forEach(req => {
                 const reqLower = req.original.toLowerCase().trim();
@@ -328,6 +336,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             });
             if (verifiedPayload.length > 0) {
                 pendingAction = { type: 'DELETE_GLOSSARY', payload: verifiedPayload };
+            } else {
+                 finalMessage = isEnglish ? "Terms not found in glossary." : "Kata tidak ditemukan di glosarium.";
             }
         }
 
