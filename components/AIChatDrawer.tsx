@@ -1,6 +1,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useChat } from '../contexts/ChatContext';
 
@@ -79,9 +80,24 @@ const AIChatDrawer: React.FC<AIChatDrawerProps> = ({ isOpen, onClose }) => {
         <div className="flex-grow overflow-y-auto p-4 space-y-6 custom-scrollbar bg-paper">
             {messages.filter(m => !m.isHidden).map((msg) => (
                 <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl p-4 text-sm leading-relaxed shadow-sm transition-all ${msg.role === 'user' ? 'bg-accent text-white' : 'bg-card border border-border text-charcoal'}`}>
-                        <div className={`prose prose-sm max-w-none prose-invert`}>
-                            <ReactMarkdown skipHtml>{msg.text}</ReactMarkdown>
+                    <div className={`max-w-[90%] rounded-2xl p-4 text-sm leading-relaxed shadow-sm transition-all overflow-hidden ${msg.role === 'user' ? 'bg-accent text-white' : 'bg-card border border-border text-charcoal'}`}>
+                        {/* MARKDOWN RENDERER DENGAN SUPPORT TABEL */}
+                        <div className={`prose prose-sm max-w-none prose-invert ${msg.role === 'user' ? 'prose-headings:text-white prose-p:text-white prose-strong:text-white' : ''}`}>
+                            <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                    // Custom rendering untuk tabel agar bisa discroll horizontal
+                                    table: ({node, ...props}) => (
+                                        <div className="overflow-x-auto my-4 rounded-lg border border-white/20">
+                                            <table className="min-w-full divide-y divide-white/20 text-left text-xs" {...props} />
+                                        </div>
+                                    ),
+                                    th: ({node, ...props}) => <th className="px-3 py-2 bg-black/10 font-bold" {...props} />,
+                                    td: ({node, ...props}) => <td className="px-3 py-2 border-t border-white/10" {...props} />
+                                }}
+                            >
+                                {msg.text}
+                            </ReactMarkdown>
                         </div>
                     </div>
 
