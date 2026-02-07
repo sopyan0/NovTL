@@ -18,8 +18,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { AuthProvider } from './contexts/AuthContext'; 
 import { AuthGuard } from './components/AuthGuard'; 
-import { initFileSystem } from './utils/fileSystem';
-import { dbService } from './services/DatabaseService';
+import { ensureDbReady } from './utils/storage';
 
 // Lazy Load Heavy Components
 const SavedTranslationsPage = React.lazy(() => import('./components/SavedTranslationsPage'));
@@ -53,19 +52,6 @@ const AppContent: React.FC = () => {
   
   const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
   const openChat = () => setIsChatOpen(true); 
-
-  // INIT SYSTEM SERVICES
-  useEffect(() => {
-    const initServices = async () => {
-        try {
-            await initFileSystem();
-            await dbService.init();
-        } catch (err) {
-            console.error("System Init Failed:", err);
-        }
-    };
-    initServices();
-  }, []);
 
   // Safe LocalStorage Access
   useEffect(() => {
@@ -153,6 +139,32 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  const [isSystemReady, setIsSystemReady] = useState(false);
+
+  useEffect(() => {
+      // INIT SYSTEM SERVICES WITH UI FEEDBACK
+      const startInit = async () => {
+          try {
+              await ensureDbReady();
+          } catch (err) {
+              console.error("System Init encountered issues (proceeding anyway):", err);
+          } finally {
+              setIsSystemReady(true);
+          }
+      };
+      startInit();
+  }, []);
+
+  if (!isSystemReady) {
+      return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-paper text-charcoal">
+               <div className="dango-loader text-5xl mb-4">🍡</div>
+               <h2 className="text-xl font-serif font-bold animate-pulse">NovTL Studio</h2>
+               <p className="text-xs text-subtle mt-2">Loading Database...</p>
+          </div>
+      );
+  }
+
   return (
     <AppProviders>
         <AppContent />

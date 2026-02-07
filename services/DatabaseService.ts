@@ -4,7 +4,6 @@ import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacito
 import { NovelProject, SavedTranslation, SavedTranslationSummary, ChatMessage } from '../types';
 import { generateId } from '../utils/id';
 
-// --- DEFINISI TABEL SQLITE (OPTIMIZED / ALA WHATSAPP) ---
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY NOT NULL,
@@ -31,7 +30,6 @@ CREATE TABLE IF NOT EXISTS chapters (
     FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
--- Tabel konten terpisah (Line-by-Line Storage)
 CREATE TABLE IF NOT EXISTS chapter_contents (
     id TEXT PRIMARY KEY NOT NULL,
     chapter_id TEXT NOT NULL,
@@ -62,18 +60,27 @@ class DatabaseService {
         if (this.isNative) {
             try {
                 this.sqlite = new SQLiteConnection(CapacitorSQLite);
-                this.db = await this.sqlite.createConnection(this.dbName, false, "no-encryption", 1, false);
-                await this.db.open();
                 
+                // CRITICAL: Cek koneksi eksisting untuk mencegah error "Connection already open"
+                const checkConn = await this.sqlite.checkConnectionsConsistency();
+                const isConn = await this.sqlite.isConnection(this.dbName, false);
+
+                if (isConn.result && checkConn.result) {
+                    this.db = await this.sqlite.retrieveConnection(this.dbName, false);
+                } else {
+                    this.db = await this.sqlite.createConnection(this.dbName, false, "no-encryption", 1, false);
+                }
+
+                await this.db.open();
                 await this.db.execute(SCHEMA);
                 
-                // Indexing untuk pencarian super cepat
                 await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_contents_chapter_id ON chapter_contents(chapter_id);`);
                 await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_contents_text ON chapter_contents(text_content);`); 
                 
-                console.log("🔥 SQLite Native Initialized (Search Ready)");
+                console.log("🔥 SQLite Native Initialized (Robust Mode)");
             } catch (e) {
                 console.error("SQLite Init Error:", e);
+                throw e; // Lempar error agar caught di ensureDbReady
             }
         } else {
             await this.initWebDB();
@@ -101,6 +108,42 @@ class DatabaseService {
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
         });
+    }
+
+    // --- DANGER ZONE: WIPE ALL DATA ---
+    async wipeAllData(): Promise<void> {
+        if (this.isNative && this.sqlite) {
+            try {
+                // 1. Tutup koneksi jika sedang terbuka
+                const isConn = await this.sqlite.isConnection(this.dbName, false);
+                if (isConn.result) {
+                    const connection = await this.sqlite.retrieveConnection(this.dbName, false);
+                    await connection.close();
+                    await this.sqlite.closeConnection(this.dbName, false);
+                }
+
+                // 2. Hapus file database secara fisik dari storage perangkat
+                await CapacitorSQLite.deleteDatabase({ database: this.dbName });
+                
+                console.log("💣 SQLite Database wiped successfully");
+            } catch (e) {
+                console.error("Error wiping SQLite:", e);
+            }
+        } else {
+            // Web/Electron: Hapus IndexedDB
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.deleteDatabase(this.dbName);
+                req.onsuccess = () => {
+                    console.log("💣 IndexedDB wiped successfully");
+                    resolve();
+                };
+                req.onerror = () => reject(req.error);
+                req.onblocked = () => {
+                    console.warn("Wipe blocked: please close other tabs");
+                    resolve(); // Tetap lanjut
+                };
+            });
+        }
     }
 
     // --- CRUD PROJECTS ---
@@ -226,12 +269,8 @@ class DatabaseService {
         }
     }
 
-    // --- SEARCH CAPABILITIES FOR AI (NEW) ---
-    // Mencari bab yang mengandung kata kunci tertentu tanpa meload semua teks
     async searchChaptersContent(projectId: string, query: string): Promise<SavedTranslation[]> {
         if (this.isNative && this.db) {
-            // Cari chapter_id yang punya baris mengandung text
-            // Limit 5 bab paling relevan agar AI tidak overload
             const sql = `
                 SELECT DISTINCT c.id, c.name, c.timestamp, c.project_id 
                 FROM chapter_contents cc
@@ -248,7 +287,6 @@ class DatabaseService {
             }
             return results;
         } else {
-            // Web Fallback: Filter manual (kurang efisien tapi jalan)
             const db = await this.getWebDB();
             return new Promise((resolve) => {
                 const req = db.transaction('chapters', 'readonly').objectStore('chapters').getAll();

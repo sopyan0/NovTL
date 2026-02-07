@@ -89,12 +89,7 @@ export const fsDelete = async (filename: string): Promise<void> => {
 };
 
 /**
- * FEATURE: DIRECT DOWNLOAD (REAL DOWNLOAD FOLDER)
- * 
- * Android: Menyimpan langsung ke folder publik "Download/NovTL" menggunakan ExternalStorage.
- * Ini membuat file langsung muncul di File Manager / Downloads app tanpa menu Share.
- * 
- * Electron: Membuka dialog save atau menyimpan ke folder Downloads OS.
+ * FEATURE: DIRECT DOWNLOAD
  */
 export const triggerDownload = async (filename: string, blob: Blob) => {
     const reader = new FileReader();
@@ -104,7 +99,6 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
         const base64data = (reader.result as string).split(',')[1];
         
         if (isElectron()) {
-            // ELECTRON: Save to Downloads folder via Main Process
             try {
                 const res = await window.novtlAPI!.saveToDownloads(filename, base64data);
                 if (res.success) {
@@ -117,46 +111,43 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
             }
         } 
         else if (isCapacitorNative()) {
-            // ANDROID: Save to Public Download folder
             try {
-                // Trik Capacitor: Directory.ExternalStorage + Path "Download/..." 
-                // ini mengarah ke /storage/emulated/0/Download/NovTL/...
-                const exportPath = `Download/NovTL/${filename}`;
+                // TRIK: Gunakan Directory.ExternalStorage tapi arahkan ke path "Download/filename"
+                // Ini memungkinkan penulisan ke folder Download publik tanpa permission khusus di Android 11+
+                const exportPath = `Download/${filename}`; 
                 
                 await Filesystem.writeFile({
                     path: exportPath,
                     data: base64data,
-                    directory: Directory.ExternalStorage, // Akses ke root storage publik
+                    directory: Directory.ExternalStorage, // Tembus ke root storage
                     recursive: true
                 });
 
-                // File di folder Download publik biasanya otomatis terindeks oleh Android MediaScanner modern
-                alert(`✅ BERHASIL DIDOWNLOAD!\n\n📂 Cek File Manager Anda:\nPenyimpanan Internal > Download > NovTL > ${filename}`);
+                alert(`✅ BERHASIL!\n\n📂 File disimpan di folder Download utama:\n${filename}`);
 
             } catch (e: any) {
-                console.error("Download Error", e);
+                console.error("Download Error (Primary)", e);
                 
-                // Fallback: Jika ExternalStorage gagal (misal di Android versi sangat lama atau strict)
-                // Kita coba simpan ke Documents lalu beri tahu user
+                // FALLBACK: Kalau ExternalStorage tetap ditolak, coba ke Documents/NovTL
                 try {
-                     await Filesystem.writeFile({
-                        path: `NovTL_Exports/${filename}`,
+                    await Filesystem.writeFile({
+                        path: `NovTL_Export/${filename}`,
                         data: base64data,
-                        directory: Directory.Documents,
+                        directory: Directory.Documents, 
                         recursive: true
                     });
-                    alert(`⚠️ Gagal akses folder Download.\nFile disimpan di: Documents/NovTL_Exports/${filename}`);
-                } catch(err2: any) {
-                    alert(`❌ Gagal total menyimpan file.\nError: ${e.message}`);
+                    alert(`⚠️ Folder Download terkunci sistem.\nFile disimpan di: Internal/Documents/NovTL_Export/${filename}`);
+                } catch (err2: any) {
+                    alert(`❌ Gagal menyimpan file: ${err2.message}`);
                 }
             }
         } else {
-            // WEB Browser (Chrome/Firefox/Safari)
+            // WEB Browser
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.download = filename;
-            document.body.appendChild(link); // Required for Firefox
+            document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
@@ -172,15 +163,9 @@ export const initFileSystem = async () => {
                 await Filesystem.requestPermissions();
             }
 
-            // Init Folder Kerja (Private/App Scope)
+            // Init Folder Kerja (Private/App Scope) di Documents
+            // JANGAN MEMBUAT FOLDER DI EXTERNAL STORAGE SAAT INIT untuk menghindari permission error
             await Filesystem.mkdir({ path: 'NovTL', directory: Directory.Documents, recursive: true });
-            
-            // Coba Init Folder Export di Download (Optional, mungkin gagal kalau permission belum ada saat init)
-            try {
-                await Filesystem.mkdir({ path: 'Download/NovTL', directory: Directory.ExternalStorage, recursive: true });
-            } catch (e) {
-                // Ignore, akan dibuat otomatis saat write file dengan recursive: true
-            }
         } catch (e) {
             console.warn("Init FS Warning:", e);
         }

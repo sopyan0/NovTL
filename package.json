@@ -3,8 +3,9 @@
   "main": "electron/main.js",
   "private": true,
   "version": "3.1.0",
-  "type": "commonjs",
+  "type": "module",
   "description": "Professional AI Novel Translator - Desktop & Mobile",
+  "author": "NovTL Studio",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -48,20 +49,18 @@
     "productName": "NovTL Studio",
     "files": [
       "dist/**/*",
-      "electron/**/*",
-      "icon-512.png",
-      "icon.png"
+      "electron/**/*"
     ],
     "directories": {
       "output": "release"
     },
     "win": {
       "target": "nsis",
-      "icon": "icon-512.png"
+      "icon": "icon.png"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "icon-512.png"
+      "icon": "icon.png"
     }
   }
 }

@@ -1,11 +1,14 @@
 
-const { app, BrowserWindow, ipcMain, shell, clipboard } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
+import { app, BrowserWindow, ipcMain, shell, clipboard } from 'electron';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// ESM Workaround for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // FOLDER PENYIMPANAN UTAMA (DATABASE & CACHE): Documents/NovTL
-// Kita tetap simpan database di Documents agar tidak terhapus user tidak sengaja saat bersih-bersih folder Download
 const BASE_DIR = path.join(app.getPath('documents'), 'NovTL');
 
 // Pastikan folder ada saat aplikasi dibuka
@@ -15,18 +18,15 @@ if (!fs.existsSync(BASE_DIR)) {
 
 // SECURITY: Validasi Path untuk mencegah Traversal Attack (../..)
 const isSafePath = (targetPath) => {
-    // Resolve path absolut dari input
     const resolvedPath = path.resolve(BASE_DIR, targetPath);
-    // Pastikan path yang di-resolve masih berada di dalam BASE_DIR
     return resolvedPath.startsWith(BASE_DIR);
 };
 
 function createWindow() {
     // Determine icon path based on environment
-    // In production (asar), __dirname is inside the archive. The icon is unpacked or at root.
     const iconPath = app.isPackaged 
-        ? path.join(process.resourcesPath, 'app.asar', 'icon-512.png') // Try inside asar first if packed
-        : path.join(__dirname, '../icon-512.png'); // Dev mode
+        ? path.join(process.resourcesPath, 'app.asar', 'icon.png')
+        : path.join(__dirname, '../icon.png'); 
 
     const mainWindow = new BrowserWindow({
         width: 1280,
@@ -35,17 +35,16 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
-            sandbox: false // Diperlukan untuk akses file system via preload
+            sandbox: false 
         },
         icon: iconPath,
-        autoHideMenuBar: true // Menyembunyikan menu bar default electron yang kurang estetis
+        autoHideMenuBar: true
     });
 
-    // Load dari dist saat production, atau localhost saat dev
+    // Load dist in production, localhost in dev
     const startUrl = process.env.ELECTRON_START_URL || `file://${path.join(__dirname, '../dist/index.html')}`;
     mainWindow.loadURL(startUrl);
 
-    // Buka link eksternal di browser default, bukan di dalam app
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url);
         return { action: 'deny' };
@@ -66,7 +65,6 @@ app.on('window-all-closed', function () {
 
 // --- API UNTUK RENDERER (REACT) ---
 
-// 1. Tulis File (Internal App Data)
 ipcMain.handle('fs-write', async (event, { filename, content }) => {
     try {
         if (!isSafePath(filename)) throw new Error("Access Denied: Invalid file path.");
@@ -80,7 +78,6 @@ ipcMain.handle('fs-write', async (event, { filename, content }) => {
     }
 });
 
-// 2. Baca File
 ipcMain.handle('fs-read', async (event, { filename }) => {
     try {
         if (!isSafePath(filename)) return null;
@@ -92,7 +89,6 @@ ipcMain.handle('fs-read', async (event, { filename }) => {
     }
 });
 
-// 3. List File
 ipcMain.handle('fs-list', async (event, { folder }) => {
     try {
         if (!isSafePath(folder || '')) return [];
@@ -104,7 +100,6 @@ ipcMain.handle('fs-list', async (event, { folder }) => {
     }
 });
 
-// 4. Hapus File
 ipcMain.handle('fs-delete', async (event, { filename }) => {
     try {
         if (!isSafePath(filename)) return { success: false, error: "Access Denied" };
@@ -116,13 +111,10 @@ ipcMain.handle('fs-delete', async (event, { filename }) => {
     }
 });
 
-// 5. Cek Path
 ipcMain.handle('get-storage-path', () => BASE_DIR);
 
-// 6. CLIPBOARD
 ipcMain.handle('clipboard-read', () => clipboard.readText());
 
-// 7. EXPORT KE DOWNLOADS (NEW FEATURE)
 ipcMain.handle('save-to-downloads', async (event, { filename, base64Data }) => {
     try {
         const downloadFolder = app.getPath('downloads');
@@ -136,8 +128,6 @@ ipcMain.handle('save-to-downloads', async (event, { filename, base64Data }) => {
         const buffer = Buffer.from(base64Data, 'base64');
         
         fs.writeFileSync(filePath, buffer);
-        
-        // Buka folder setelah selesai (opsional, agar user tau filenya dimana)
         shell.showItemInFolder(filePath);
         
         return { success: true, path: filePath };
