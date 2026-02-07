@@ -13,17 +13,16 @@ NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk men
 ### Di Android
 1. Install file `.apk` yang disediakan.
 2. Berikan izin akses penyimpanan saat diminta.
-3. Novel Anda akan disimpan di folder `Internal Storage/Documents/NovTL`.
+3. Hasil ekspor (EPUB/TXT) akan muncul di folder **Penyimpanan Internal > Download > NovTL_Export**.
 
 ---
 
 ## 🛠️ Fitur Utama
 
-- **Penerjemahan Bernuansa**: AI tidak hanya menerjemahkan kata demi kata, tapi menjaga alur cerita agar tetap enak dibaca seperti novel aslinya.
-- **Glosarium Cerdas**: Pastikan nama karakter, jurus, atau istilah dunia novel tetap konsisten dari Bab 1 hingga Bab 2000.
+- **Penerjemahan Bernuansa**: AI tidak hanya menerjemahkan kata demi kata, tapi menjaga alur cerita agar tetap enak dibaca.
+- **Glosarium Cerdas**: Pastikan nama karakter, jurus, atau istilah dunia novel tetap konsisten.
 - **Hybrid Storage**: Menggabungkan kecepatan Database Lokal (Cache) dengan keamanan File Fisik di storage Anda.
 - **Export EPUB**: Simpan hasil terjemahan menjadi file buku digital (EPUB) yang siap dibaca di Google Play Books atau Moon+ Reader.
-- **Danggo Assistant**: Chat dengan asisten AI untuk membantu merangkum cerita atau mengelola glosarium secara otomatis.
 
 ---
 
@@ -32,23 +31,16 @@ NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk men
 Aplikasi ini membutuhkan "Kunci API" untuk bekerja. Kami merekomendasikan **Google Gemini** karena gratis dan cepat:
 1. Buka [Google AI Studio](https://aistudio.google.com/app/apikey).
 2. Buat API Key baru.
-3. Masukkan kunci tersebut ke dalam menu **Setelan** di NovTL.
+3. Masukkan kunci tersebut ke dalam menu **Setelan** atau lewat tombol 🔑 di halaman utama NovTL.
 
 ---
 
 ## 📂 Lokasi Data Anda (Privasi 100%)
 
 Data Anda **TIDAK** disimpan di server kami. Semua file ada di perangkat Anda:
-- **Windows**: `C:\Users\[User]\Documents\NovTL`
-- **Android**: `/Documents/NovTL` (Cek melalui File Manager)
-
-Anda bisa membackup folder tersebut secara manual ke flashdisk atau cloud pribadi Anda.
-
----
-
-## 🍡 Tips Penggunaan
-- **Gunakan Mode Novel (2-Pass)**: Untuk kualitas terbaik, aktifkan mode ini di Toolbar. AI akan menerjemahkan lalu memoles bahasanya agar lebih sastrawi.
-- **Chat dengan Danggo**: Jika kamu bingung dengan alur cerita di bab sebelumnya, tanya saja ke Danggo. Dia bisa membaca koleksi novelmu!
+- **Windows**: `Documents/NovTL`
+- **Android (Aplikasi)**: `Documents/NovTL` (Biasanya tersembunyi di internal folder Android)
+- **Android (Hasil Ekspor)**: `Download/NovTL_Export` (Gunakan File Manager untuk mencari folder Download utama)
 
 ---
 *Dibuat dengan ❤️ untuk para penikmat novel.*

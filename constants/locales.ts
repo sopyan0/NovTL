@@ -59,6 +59,7 @@ export const TRANSLATIONS = {
       tabs: {
         start: "🚀 Getting Started",
         api: "🔑 AI Setup",
+        glossary: "📖 Glossary",
         storage: "💾 Storage",
         faq: "❓ FAQ"
       },
@@ -83,6 +84,13 @@ export const TRANSLATIONS = {
         step3: "Paste your key and select the Gemini Flash model.",
         step4: "Now you're ready to translate!",
         note: "Privacy: Your API Key is only stored in your device's memory."
+      },
+      glossary: {
+        title: "Mastering the Glossary",
+        desc: "The Glossary ensures consistency. AI will never forget your character names or terms.",
+        step1: "Manual Add: Go to Settings, type the source and target word, then click Add.",
+        step2: "AI Assistant: Chat with Danggo (the dango button) and say 'Add character A as B to glossary'.",
+        step3: "Strict Rule: The AI is instructed to ALWAYS prioritize your glossary over its own knowledge."
       },
       storage: {
         title: "Where are my files?",
@@ -160,6 +168,7 @@ export const TRANSLATIONS = {
       tabs: {
         start: "🚀 Memulai",
         api: "🔑 Setup AI",
+        glossary: "📖 Glosarium",
         storage: "💾 Penyimpanan",
         faq: "❓ FAQ"
       },
@@ -185,12 +194,20 @@ export const TRANSLATIONS = {
         step4: "Selesai! Anda siap menerjemahkan ribuan kata.",
         note: "Privasi: API Key hanya disimpan di memori perangkat Anda."
       },
+      glossary: {
+        title: "Menguasai Glosarium",
+        desc: "Glosarium memastikan AI tetap konsisten. AI tidak akan lupa nama karakter atau jurus yang sudah Anda tetapkan.",
+        step1: "Manual: Buka Setelan, ketik kata asli dan terjemahannya, lalu klik Tambah.",
+        step2: "Asisten AI: Chat dengan Danggo dan katakan 'Tambahkan istilah X sebagai Y ke glosarium'.",
+        step3: "Kekuatan Utama: AI NovTL diprogram untuk SELALU memprioritaskan glosarium Anda di atas pengetahuannya sendiri."
+      },
       storage: {
         title: "Di mana file saya disimpan?",
         desc: "NovTL menggunakan Hybrid Storage agar aman dan cepat.",
         step1: "File Fisik: Semua data disimpan di folder 'Documents/NovTL' di komputer/HP Anda.",
         step2: "Hybrid Cache: Kami menggunakan database lokal (IndexedDB) agar ribuan bab terbuka secara instan.",
-        step3: "Optimasi: Jika aplikasi terasa berat, gunakan 'Bersihkan Cache' di Setelan. File asli tetap AMAN."
+        step3: "Optimasi: Jika aplikasi terasa berat, gunakan 'Bersihkan Cache' di Setelan. File asli tetap AMAN.",
+        step4: "Ekspor: Hasil EPUB/TXT di Android akan muncul di folder 'Download/NovTL_Export'."
       },
       faq: {
         q1: "Apakah ini gratis?",

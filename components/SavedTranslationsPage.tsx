@@ -11,6 +11,7 @@ import {
     deleteTranslationFromDB, 
     clearProjectTranslationsFromDB 
 } from '../utils/storage';
+import { triggerDownload } from '../utils/fileSystem';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -32,11 +33,9 @@ export default function SavedTranslationsPage() {
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'a-z' | 'z-a'>('oldest'); 
   const [currentPage, setCurrentPage] = useState(1);
 
-  // --- SELECTION STATE ---
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // --- READING MODE STATE ---
   const [isReadingFullScreen, setIsReadingFullScreen] = useState<boolean>(false); 
   const [currentReadingTranslation, setCurrentReadingTranslation] = useState<SavedTranslation | null>(null); 
   const [isEditingContent, setIsEditingContent] = useState(false);
@@ -47,7 +46,6 @@ export default function SavedTranslationsPage() {
   const [confirmDeleteTargetId, setConfirmDeleteTargetId] = useState<string | null>(null);
   const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState(false);
 
-  // Refs
   const readingContainerRef = useRef<HTMLDivElement>(null);
   const portalRoot = document.getElementById('portal-root');
 
@@ -71,7 +69,6 @@ export default function SavedTranslationsPage() {
       fetchData();
   }, [fetchData]);
 
-  // FULL SORTED DATA (Digunakan untuk navigasi Next/Prev)
   const filteredAndSortedData = useMemo(() => {
     let data = [...localSummaries]; 
 
@@ -102,7 +99,6 @@ export default function SavedTranslationsPage() {
       setCurrentPage(1);
   }, [searchTerm, sortOrder, activeProjectId]);
 
-  // --- DETERMINE NEXT CHAPTER ---
   useEffect(() => {
     if (currentReadingTranslation && filteredAndSortedData.length > 0) {
         const currentIndex = filteredAndSortedData.findIndex(item => item.id === currentReadingTranslation.id);
@@ -114,8 +110,6 @@ export default function SavedTranslationsPage() {
     }
   }, [currentReadingTranslation, filteredAndSortedData]);
 
-
-  // --- SELECTION LOGIC ---
   const toggleSelectionMode = () => {
       setIsSelectionMode(!isSelectionMode);
       setSelectedIds(new Set()); 
@@ -135,7 +129,6 @@ export default function SavedTranslationsPage() {
       setSelectedIds(new Set(ids));
   };
 
-  // --- DATA PREPARATION FOR DOWNLOAD ---
   const getPreparedDataForDownload = async () => {
       let itemsToProcess = selectedIds.size > 0 
           ? localSummaries.filter(s => selectedIds.has(s.id))
@@ -143,7 +136,6 @@ export default function SavedTranslationsPage() {
 
       if (itemsToProcess.length === 0) return [];
 
-      // FORCE NATURAL SORT FOR EPUB
       itemsToProcess.sort((a, b) => 
           a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
       );
@@ -177,13 +169,6 @@ export default function SavedTranslationsPage() {
     const idToDelete = confirmDeleteTargetId;
     setLocalSummaries(prev => prev.filter(item => item.id !== idToDelete));
     await deleteTranslationFromDB(idToDelete);
-    if (selectedIds.has(idToDelete)) {
-        setSelectedIds(prev => {
-            const next = new Set(prev);
-            next.delete(idToDelete);
-            return next;
-        });
-    }
     setConfirmDeleteTargetId(null);
     setIsConfirmDeleteOpen(false); 
   };
@@ -204,14 +189,10 @@ export default function SavedTranslationsPage() {
             return `[${item.name}]\n${item.translatedText}\n\n========================================\n\n`;
         }).join('\n');
         const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${projectName.replace(/\s+/g, '_')}_Selection.txt`;
-        link.click();
-        URL.revokeObjectURL(url);
+        const filename = `${projectName.replace(/\s+/g, '_')}_Export.txt`;
+        await triggerDownload(filename, blob);
     } catch (e) {
-        alert("Failed to prepare download.");
+        alert("Gagal menyiapkan download.");
     } finally {
         setIsGeneratingEpub(false);
     }
@@ -224,14 +205,10 @@ export default function SavedTranslationsPage() {
         const fullData = await getPreparedDataForDownload();
         const { generateEpub } = await import('../utils/epubGenerator');
         const blob = await generateEpub(activeProject, fullData);
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${projectName.replace(/\s+/g, '_')}.epub`;
-        link.click();
-        URL.revokeObjectURL(url);
+        const filename = `${projectName.replace(/\s+/g, '_')}.epub`;
+        await triggerDownload(filename, blob);
     } catch (e) {
-        alert("Failed. Check console.");
+        alert("Gagal membuat EPUB.");
     } finally {
         setIsGeneratingEpub(false);
     }
@@ -246,10 +223,9 @@ export default function SavedTranslationsPage() {
             setTempContent(fullData.translatedText);
             setIsEditingContent(false);
         } else {
-            alert("Error: Chapter content not found.");
+            alert("Error: Konten tidak ditemukan.");
         }
     } catch (e) {
-        console.error(e);
         alert("Error loading chapter.");
     } finally {
         setIsLoadingContent(false);
@@ -267,14 +243,9 @@ export default function SavedTranslationsPage() {
   };
 
   const handleCloseReadingFullScreen = () => {
-    // Saat tutup manual, kita RESET posisi baca ke 0 agar jika dibuka lagi mulai dari awal.
-    // Tapi jika user hanya keluar aplikasi/refresh, posisi tetap tersimpan.
-    // Sesuai request: "tombol kembali" = save. "tombol tutup (X)" = reset.
-    // Di sini asumsinya tombol X adalah untuk 'Selesai Baca'.
     if (currentReadingTranslation) {
          localStorage.removeItem(`novtl_read_pos_${currentReadingTranslation.id}`);
     }
-
     setIsEditingContent(false);
     setIsReadingFullScreen(false);
     setCurrentReadingTranslation(null);
@@ -283,7 +254,6 @@ export default function SavedTranslationsPage() {
 
   const handleNextChapter = async () => {
       if (nextChapterSummary) {
-          // Reset posisi chapter sekarang karena sudah selesai
           if (currentReadingTranslation) {
               localStorage.removeItem(`novtl_read_pos_${currentReadingTranslation.id}`);
           }
@@ -291,15 +261,10 @@ export default function SavedTranslationsPage() {
       }
   };
 
-  const handleDownloadReading = () => {
+  const handleDownloadReading = async () => {
     if (currentReadingTranslation) {
       const blob = new Blob([currentReadingTranslation.translatedText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${currentReadingTranslation.name}.txt`;
-      link.click();
-      URL.revokeObjectURL(url);
+      await triggerDownload(`${currentReadingTranslation.name}.txt`, blob);
     }
   };
 
@@ -308,12 +273,7 @@ export default function SavedTranslationsPage() {
     try {
         const { generateEpub } = await import('../utils/epubGenerator');
         const blob = await generateEpub(activeProject, [currentReadingTranslation]);
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${currentReadingTranslation.name}.epub`;
-        link.click();
-        URL.revokeObjectURL(url);
+        await triggerDownload(`${currentReadingTranslation.name}.epub`, blob);
     } catch (e) {
         console.error("Failed single epub", e);
     }
@@ -328,9 +288,7 @@ export default function SavedTranslationsPage() {
       setIsEditingContent(false);
   };
 
-  // --- READING MODE COMPONENT ---
   const ReadingModeModal = () => {
-      // Restore scroll INSTANTLY before paint
       useLayoutEffect(() => {
         if (currentReadingTranslation && readingContainerRef.current) {
             const savedPos = localStorage.getItem(`novtl_read_pos_${currentReadingTranslation.id}`);
@@ -343,12 +301,9 @@ export default function SavedTranslationsPage() {
         }
       }, []);
 
-      // Simpan posisi scroll setiap user berhenti scroll sebentar (throttled)
-      // Menggunakan LocalStorage agar tahan restart HP/Browser Close
       const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
           if (!currentReadingTranslation) return;
           const target = e.currentTarget;
-          // Simpan langsung, browser modern sanggup handle ini
           localStorage.setItem(`novtl_read_pos_${currentReadingTranslation.id}`, target.scrollTop.toString());
       };
 
@@ -441,7 +396,6 @@ export default function SavedTranslationsPage() {
           </div>
       )}
 
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-100 dark:border-gray-800">
         <div className="w-full md:w-auto">
            <div className="flex items-center gap-2 mb-2">
@@ -492,7 +446,6 @@ export default function SavedTranslationsPage() {
         </div>
       </div>
 
-      {/* TOOLBAR */}
       {localSummaries.length > 0 && (
         <div className="glass p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between sticky top-4 z-30 transition-all shadow-soft">
             <div className="relative w-full md:w-1/2 lg:w-1/3">
@@ -526,7 +479,6 @@ export default function SavedTranslationsPage() {
         </div>
       )}
 
-      {/* LIBRARY GRID */}
       {isLoading ? (
         <div className="flex justify-center items-center py-24">
              <div className="w-10 h-10 border-4 border-gray-200 border-t-accent rounded-full animate-spin"></div>
@@ -619,7 +571,6 @@ export default function SavedTranslationsPage() {
         portalRoot
       )}
 
-      {/* CONFIRM DIALOGS */}
       <ConfirmDialog isOpen={isConfirmDeleteOpen} onClose={() => setIsConfirmDeleteOpen(false)} onConfirm={performDelete} title={t('library.confirmDeleteTitle')} message={t('library.confirmDeleteMsg')} isDestructive={true} />
       <ConfirmDialog isOpen={isConfirmClearAllOpen} onClose={() => setIsConfirmClearAllOpen(false)} onConfirm={performClearAll} title={t('library.confirmClearTitle')} message={t('library.confirmClearMsg')} isDestructive={true} />
 

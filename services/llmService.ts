@@ -7,7 +7,7 @@ import { DEFAULT_MODELS } from "../constants";
 
 const API_ENDPOINTS: Record<string, string> = {
   'OpenAI (GPT)': 'https://api.openai.com/v1/chat/completions',
-  'DeepSeek': 'https://api.deepseek.com/chat/completions',
+  'DeepSeek': 'https://api.api.deepseek.com/chat/completions',
   'Grok (xAI)': 'https://api.x.ai/v1/chat/completions'
 };
 
@@ -39,7 +39,6 @@ export const hasValidApiKey = (settings: AppSettings): boolean => {
 // --- HELPER: ERROR MAPPING (Premium UX) ---
 const mapAIError = (error: any): string => {
   const msg = error.message || String(error);
-  // STANDARDIZED ENGLISH ERRORS FOR GLOBAL TEMPLATE
   if (msg.includes('401') || msg.includes('API key not valid')) return "Invalid API Key. Please check your Settings.";
   if (msg.includes('429') || msg.includes('Quota exceeded')) return "API Quota Exceeded or Rate Limited. Please wait a moment.";
   if (msg.includes('503') || msg.includes('Overloaded')) return "AI Server is overloaded. Try again in 1 minute.";
@@ -76,17 +75,12 @@ const splitTextByParagraphs = (text: string, maxLength: number = 3500): string[]
   return chunks.filter(c => c.length > 0);
 };
 
-// UPDATE: Token Saver - Only take the beginning and end if text is too long
 const getSmartSnippet = (text: string, maxLen: number = 1000): string => {
     if (!text) return "(Empty)";
     if (text.length <= maxLen) return text;
-    
-    // Take 60% from start (important for character intro) and 40% from end (latest context)
     const headLen = Math.floor(maxLen * 0.6);
     const tailLen = Math.floor(maxLen * 0.4);
-    
     const hiddenCount = text.length - (headLen + tailLen);
-    
     return text.slice(0, headLen) + 
            `\n\n... [${hiddenCount} chars cut to save quota] ...\n\n` + 
            text.slice(-tailLen);
@@ -97,7 +91,6 @@ function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// --- HELPER: SIMPLE NON-STREAMING GENERATION (FOR PASS 1) ---
 const generateTextSimple = async (
     prompt: string, 
     systemInstruction: string,
@@ -141,7 +134,7 @@ export const translateTextStream = async (
   project: NovelProject,
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
-  mode: 'standard' | 'high_quality' = 'standard' // NEW PARAMETER
+  mode: 'standard' | 'high_quality' = 'standard'
 ): Promise<{ result: string, detectedLanguage: string | null }> => {
   const config = getAIClientConfig(settings);
   if (!config.apiKey) throw new Error(`API Key for ${config.provider} is missing.`);
@@ -150,7 +143,6 @@ export const translateTextStream = async (
   const targetLang = project.targetLanguage || "Indonesian";
   const glossary = project.glossary || [];
 
-  // OPTIMIZATION: Regex-based Glossary Matching (Faster O(n) vs O(nm))
   const glossaryMap = new Map(glossary.map(item => [item.original.toLowerCase(), item]));
   const glossaryKeys = Array.from(glossaryMap.keys()).sort((a, b) => b.length - a.length);
   const glossaryPattern = glossaryKeys.length > 0
@@ -171,78 +163,44 @@ export const translateTextStream = async (
 
       while (attempts < maxAttempts && !success) {
           let currentChunkAccumulator = ""; 
-
           try {
                 if (signal?.aborted) throw new Error('AbortedByUser');
-
                 let relevantGlossary: typeof glossary = [];
                 if (glossaryPattern) {
                     const matches = chunk.match(glossaryPattern) || [];
                     const foundKeys = new Set(matches.map(m => m.toLowerCase()));
                     relevantGlossary = Array.from(foundKeys).map(k => glossaryMap.get(k)!).filter(Boolean);
                 }
-            
                 const glossaryText = relevantGlossary.length > 0 
                     ? `\n[GLOSSARY - STRICTLY FOLLOW]\n${relevantGlossary.map(item => `${item.original}=${item.translated}`).join('\n')}\n`
                     : "";
-
                 const contextPrompt = index > 0 
                     ? `\n[PREVIOUS CONTEXT]\n...${previousContextSource.slice(-300)}\n`
                     : "";
-
-                // --- LOGIC TWO-PASS VS STANDARD ---
                 
                 let promptToStream = "";
                 let systemInstruction = "";
 
                 if (mode === 'high_quality') {
-                    // PASS 1: DRAFTING (Hidden from UI)
-                    // We generate a rough, accurate translation first without streaming to UI
-                    const draftSystem = `Role: Translator. Task: Translate STRICTLY to ${targetLang}. Focus on accuracy and meaning. Do not worry about flow yet.`;
+                    const draftSystem = `Role: Translator. Task: Translate STRICTLY to ${targetLang}. Focus on accuracy and meaning.`;
                     const draftPrompt = `${glossaryText}${contextPrompt}\n[SOURCE]\n${chunk}`;
-                    
                     const draftResult = await generateTextSimple(draftPrompt, draftSystem, config);
-
                     if (signal?.aborted) throw new Error('AbortedByUser');
 
-                    // PASS 2: POLISHING (Stream to UI)
-                    // We take the draft and ask AI to make it a novel
-                    systemInstruction = `Role: Professional Novel Editor. 
-Task: Rewrite the provided draft into high-quality ${targetLang} novel prose.
-Style: ${instruction}.
-Rules: 
-1. Fix stiff/robotic phrasing. 
-2. Make it flow naturally. 
-3. Keep all meanings and glossary terms intact.`;
-
-                    promptToStream = `[DRAFT TEXT]\n${draftResult}\n\n[INSTRUCTION]\nPolish this draft into a final novel version. Output ONLY the final text.`;
-
+                    systemInstruction = `Role: Professional Novel Editor. Rewrite the provided draft into high-quality ${targetLang} novel prose. Style: ${instruction}.`;
+                    promptToStream = `[DRAFT TEXT]\n${draftResult}\n\n[INSTRUCTION]\nPolish this draft. Output ONLY final text.`;
                 } else {
-                    // STANDARD MODE (Single Pass)
-                    systemInstruction = `Role: Professional Novel Translator. 
-Target Language: ${targetLang}.
-Style: ${instruction}.
-Rules:
-1. Translate ONLY the text in [CURRENT SOURCE].
-2. Do not output the glossary or context.
-3. Maintain continuity with previous context.`;
-
+                    systemInstruction = `Role: Professional Novel Translator. Target: ${targetLang}. Style: ${instruction}. Rules: 1. Translate ONLY [CURRENT SOURCE]. 2. No glossary/context in output.`;
                     promptToStream = `${glossaryText}${contextPrompt}\n[CURRENT SOURCE]\n${chunk}`;
                 }
-
-                // --- STREAMING EXECUTION (Pass 2 or Standard) ---
 
                 if (config.provider === 'Gemini') {
                     const ai = new GoogleGenAI({ apiKey: config.apiKey }); 
                     const responseStream = await ai.models.generateContentStream({
                         model: config.model,
                         contents: [{ role: 'user', parts: [{ text: promptToStream }] }], 
-                        config: { 
-                            systemInstruction, 
-                            temperature: mode === 'high_quality' ? 0.7 : 0.5, // More creative for polish
-                        },
+                        config: { systemInstruction, temperature: mode === 'high_quality' ? 0.7 : 0.5 },
                     });
-
                     for await (const chunkResp of responseStream) {
                         if (signal?.aborted) throw new Error('AbortedByUser');
                         const chunkText = chunkResp.text || "";
@@ -252,30 +210,18 @@ Rules:
                 } else if (config.endpoint) {
                     const response = await fetch(config.endpoint, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${config.apiKey}`
-                        },
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
                         body: JSON.stringify({
                             model: config.model,
-                            messages: [
-                                { role: 'system', content: systemInstruction },
-                                { role: 'user', content: promptToStream }
-                            ],
+                            messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: promptToStream }],
                             stream: true
                         }),
                         signal
                     });
-
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.error?.message || `HTTP Error ${response.status}`);
-                    }
-
+                    if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
                     const reader = response.body?.getReader();
                     const decoder = new TextDecoder();
                     if (!reader) throw new Error("Failed to read stream.");
-
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
@@ -295,36 +241,20 @@ Rules:
                         }
                     }
                 }
-                
                 fullText += currentChunkAccumulator;
                 success = true;
-
           } catch (err: any) {
               lastError = err;
-              if (err.message === 'AbortedByUser' || signal?.aborted) {
-                  throw new Error('AbortedByUser');
-              }
+              if (err.message === 'AbortedByUser' || signal?.aborted) throw new Error('AbortedByUser');
               attempts++;
-              if (attempts < maxAttempts) {
-                  await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts)));
-              }
+              if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempts)));
           }
       } 
-
-      if (!success) {
-          throw new Error(mapAIError(lastError));
-      }
-
-      if (!fullText.endsWith('\n\n')) {
-             fullText += '\n\n';
-             onChunk('\n\n');
-      }
+      if (!success) throw new Error(mapAIError(lastError));
+      if (!fullText.endsWith('\n\n')) { fullText += '\n\n'; onChunk('\n\n'); }
       previousContextSource = chunk;
-      if (index < chunks.length - 1) {
-             await new Promise(r => setTimeout(r, 500));
-      }
+      if (index < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
   }
-
   return { result: fullText.trim(), detectedLanguage: null };
 };
 
@@ -332,7 +262,7 @@ Rules:
 
 const glossaryToolGemini: FunctionDeclaration = {
   name: 'manage_glossary',
-  description: 'Add or Delete glossary items based on user request. Use this tool when user says "add to glossary" or "save terms".',
+  description: 'Add or Delete glossary items. CRITICAL: Use ONLY when user EXPLICITLY asks to "add", "save", or "delete" specific terms. DO NOT use for general chat or greetings.',
   parameters: {
     type: Type.OBJECT,
     properties: { 
@@ -341,10 +271,7 @@ const glossaryToolGemini: FunctionDeclaration = {
         type: Type.ARRAY,
         items: {
             type: Type.OBJECT,
-            properties: {
-                original: { type: Type.STRING },
-                translated: { type: Type.STRING }
-            },
+            properties: { original: { type: Type.STRING }, translated: { type: Type.STRING } },
             required: ['original']
         }
       }
@@ -355,19 +282,17 @@ const glossaryToolGemini: FunctionDeclaration = {
 
 const memoryToolGemini: FunctionDeclaration = {
   name: 'read_historical_content',
-  description: 'STRICTLY FOR SEARCHING NEW INFO. Do NOT use this tool if the user asks for comparison, reasoning, or logic about characters/events ALREADY discussed in the chat history. Only use if user explicitly asks to "search", "find", or "read" a chapter.',
+  description: 'Search for info in saved chapters. ONLY use if user asks to "search", "find", or "read" a previous chapter.',
   parameters: {
     type: Type.OBJECT,
-    properties: {
-      search_query: { type: Type.STRING, description: "The keyword, character name, or topic to look for." }
-    },
+    properties: { search_query: { type: Type.STRING, description: "Keyword or topic to look for." } },
     required: ['search_query']
   }
 };
 
 const readFullContentTool: FunctionDeclaration = {
   name: 'read_full_editor_content',
-  description: 'CRITICAL: Use this tool ONLY when you need to read the FULL text in the editor to find details that are missing from the snippet (e.g., middle of the text).',
+  description: 'Read the ENTIRE text in the current editor. ONLY use if user explicitly asks about the current active chapter in detail.',
   parameters: { type: Type.OBJECT, properties: {}, required: [] }
 };
 
@@ -397,41 +322,39 @@ export const chatWithAssistant = async (
   let contextInjection = "";
   if (editorContext) {
       if (forceFullContext) {
-          contextInjection = `\n[FULL EDITOR CONTENT - READ MODE ACTIVE]\nSOURCE:\n${editorContext.sourceText}\n\nTRANSLATION:\n${editorContext.translatedText}\n`;
+          contextInjection = `\n[FULL EDITOR CONTENT]\nSOURCE:\n${editorContext.sourceText}\n\nTRANSLATION:\n${editorContext.translatedText}\n`;
       } else {
-          contextInjection = `\n[CURRENT EDITOR SNIPPET]\n(Text is truncated to save tokens. Only Start & End shown)\nSOURCE:\n${getSmartSnippet(editorContext.sourceText, 1000)}\n\nTRANSLATION:\n${getSmartSnippet(editorContext.translatedText, 1000)}\n`;
+          contextInjection = `\n[EDITOR SNIPPET]\nSOURCE:\n${getSmartSnippet(editorContext.sourceText, 1000)}\n\nTRANSLATION:\n${getSmartSnippet(editorContext.translatedText, 1000)}\n`;
       }
   }
 
-  const systemPromptID = `Kamu adalah Danggo🍡, Asisten Penulis Novel yang teliti dan kreatif.
+  const systemPromptID = `Kamu adalah Danggo🍡, Asisten Novel.
     
-    KONTEKS GLOSARIUM SAAT INI:
-    [${glossarySummary}]
+    KONTEKS GLOSARIUM: [${glossarySummary}]
     
-    INSTRUKSI UTAMA & PEMBATASAN TOOL:
-    1. PRIORITAS UTAMA: Gunakan Ingatan/Context Window untuk menjawab. Cek history percakapan DULU.
-    2. JANGAN GUNAKAN TOOL 'read_historical_content' jika user bertanya perbandingan, alasan, atau logika (Contoh: "Apa beda A dan B?", "Kenapa X terjadi?"). Jawablah menggunakan otakmu sendiri berdasarkan informasi yang BARU SAJA kamu baca/diskusikan.
-    3. HANYA gunakan 'read_historical_content' jika user berkata "Cari...", "Baca Chapter X", atau bertanya fakta spesifik yang BELUM pernah dibahas sama sekali di sesi ini.
-    4. Jika user meminta menambah glosarium dari editor, BACA 'SOURCE' dan 'TRANSLATION'. Panggil 'manage_glossary' (ADD).
-    5. Jawab santai dan sopan dalam Bahasa Indonesia.`;
+    PERATURAN SANGAT KETAT:
+    1. JANGAN panggil tool 'manage_glossary' jika user hanya menyapa (Halo, Hai, dsb) atau bertanya hal umum.
+    2. HANYA panggil tool jika ada instruksi EKSPLESIT seperti "tambah kata X", "simpan glosarium", atau "hapus kata Y".
+    3. Jika user bertanya tentang isi novel, BACA 'EDITOR SNIPPET' yang diberikan.
+    4. Jawablah dengan ramah dan singkat. Fokus pada bantuan menulis.
+    5. Jika tidak yakin butuh tool, JANGAN gunakan tool. Cukup jawab dengan teks biasa.`;
 
-  const systemPromptEN = `You are Danggo🍡, a meticulous and creative Novel Author Assistant.
+  const systemPromptEN = `You are Danggo🍡, a Novel Assistant.
     
-    CURRENT GLOSSARY CONTEXT:
-    [${glossarySummary}]
+    GLOSSARY: [${glossarySummary}]
     
-    CORE INSTRUCTIONS & TOOL RESTRICTIONS:
-    1. TOP PRIORITY: Use your Context Window/Memory first. Check chat history BEFORE calling tools.
-    2. DO NOT USE 'read_historical_content' for reasoning, comparison, or logic questions (e.g., "Difference between A and B?", "Why did X happen?"). Answer using your own brain based on recent chat history.
-    3. ONLY use 'read_historical_content' if user explicitly says "Search...", "Read Chapter X", or asks for purely new specific facts not yet discussed.
-    4. If user wants to add glossary, READ 'SOURCE' and 'TRANSLATION'. Call 'manage_glossary' (ADD).
-    5. Answer friendly in English.`;
+    STRICT RULES:
+    1. DO NOT call 'manage_glossary' for greetings (Hello, Hi) or casual chat.
+    2. ONLY use tools if user EXPLICITLY asks to "add term X", "save glossary", or "delete term Y".
+    3. Use the 'EDITOR SNIPPET' to answer questions about the current story.
+    4. Keep answers friendly and concise.
+    5. When in doubt, DO NOT call tools. Just reply with text.`;
 
   const systemPrompt = language === 'en' ? systemPromptEN : systemPromptID;
 
-  const historyContent = history.map(m => ({ 
+  const historyContent = history.filter(m => !m.isHidden).map(m => ({ 
     role: m.role === 'model' ? 'model' as const : 'user' as const, 
-    parts: [{ text: m.text.slice(0, 1000) }] 
+    parts: [{ text: m.text.slice(0, 500) }] 
   })).slice(-6); 
 
   const finalUserMessage = `${userMessage}\n\n${contextInjection}`;
@@ -448,55 +371,25 @@ export const chatWithAssistant = async (
         config: {
           systemInstruction: systemPrompt,
           tools: [{ functionDeclarations: [glossaryToolGemini, memoryToolGemini, readFullContentTool] }],
-          temperature: 0.5 
+          temperature: 0.4
         }
       });
 
       const fc = response.functionCalls?.[0];
-      if (fc) {
-          return handleToolCall(fc.name, fc.args, language);
-      }
-      const defaultMsg = language === 'en' ? "Danggo is ready to help!" : "Danggo siap membantu, Kak!";
-      return { type: 'NONE', message: response.text || defaultMsg };
+      if (fc) return handleToolCall(fc.name, fc.args, language);
+      return { type: 'NONE', message: response.text || (language === 'en' ? "Ready!" : "Siap membantu!") };
     } catch (err: any) {
         throw new Error(mapAIError(err));
     }
-  } else if (config.endpoint) {
-      try {
-          const response = await fetch(config.endpoint, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${config.apiKey}`
-              },
-              body: JSON.stringify({
-                  model: config.model,
-                  messages: [
-                      { role: 'system', content: systemPrompt },
-                      ...history.slice(-6).map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.text })),
-                      { role: 'user', content: finalUserMessage }
-                  ],
-                  temperature: 0.5
-              })
-          });
-
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const json = await response.json();
-          return { type: 'NONE', message: json.choices[0].message.content };
-      } catch (err: any) {
-          throw new Error(mapAIError(err));
-      }
   }
-  
-  return { type: 'NONE', message: language === 'en' ? "Provider not supported for chat yet." : "Maaf Kak, provider ini belum didukung untuk chat." };
+  return { type: 'NONE', message: language === 'en' ? "Provider not supported for chat." : "Provider ini belum mendukung chat." };
 };
 
 function handleToolCall(name: string, args: any, language: 'en' | 'id'): AssistantAction {
     if (name === 'read_full_editor_content') {
-        const msg = language === 'en' ? "Reading the full text for you..." : "Sedang membaca keseluruhan teks di editor...";
+        const msg = language === 'en' ? "Reading full text..." : "Membaca teks lengkap...";
         return { type: 'READ_FULL_EDITOR_AND_REPROCESS', message: msg };
     }
-
     if (name === 'manage_glossary') {
         const { action, items } = args;
         if (action === 'ADD') {
@@ -504,39 +397,15 @@ function handleToolCall(name: string, args: any, language: 'en' | 'id'): Assista
                 original: String(i.original || '').trim(),
                 translated: String(i.translated || '').trim()
             })).filter((i: any) => i.original !== '');
-            
-            const count = payload.length;
-            const msg = language === 'en' 
-                ? `Danggo found ${count} terms to add. Do you agree?` 
-                : `Danggo menemukan ${count} istilah untuk ditambahkan. Setuju, Kak?`;
-            return { type: 'ADD_GLOSSARY', payload, message: msg };
+            if (payload.length === 0) return { type: 'NONE', message: language === 'en' ? "No terms found to add." : "Tidak ada kata untuk ditambah." };
+            return { type: 'ADD_GLOSSARY', payload, message: language === 'en' ? `Add ${payload.length} terms?` : `Tambah ${payload.length} kata ke glosarium?` };
         } else {
-            if (items.length > 50) {
-                 const msg = language === 'en'
-                    ? "For safety, Danggo cannot delete more than 50 words at once. Please use Settings! 🛡️"
-                    : "Demi keamanan, Danggo tidak bisa menghapus lebih dari 50 kata sekaligus. Silakan hapus secara bertahap atau gunakan menu Setelan ya! 🛡️";
-                 return { type: 'NONE', message: msg };
-            }
-            const payload: DeleteGlossaryPayload[] = items.map((i: any) => ({
-                original: String(i.original || '').trim()
-            })).filter((i: any) => i.original !== '');
-            const msg = language === 'en'
-                ? "Danggo has prepared the deletion. Please confirm below!"
-                : "Danggo sudah siapkan penghapusan kata. Konfirmasi di bawah ya!";
-            return { type: 'DELETE_GLOSSARY', payload, message: msg };
+            const payload: DeleteGlossaryPayload[] = items.map((i: any) => ({ original: String(i.original || '').trim() })).filter((i: any) => i.original !== '');
+            return { type: 'DELETE_GLOSSARY', payload, message: language === 'en' ? "Confirm deletion?" : "Konfirmasi hapus kata?" };
         }
     }
     if (name === 'read_historical_content') {
-        const { search_query } = args;
-        const msg = language === 'en'
-            ? `Searching for "${search_query}" in your library...`
-            : `Mencari "${search_query}" di seluruh bab novel Kakak...`;
-        return {
-            type: 'READ_SAVED_TRANSLATION',
-            payload: String(search_query || ''),
-            message: msg
-        };
+        return { type: 'READ_SAVED_TRANSLATION', payload: String(args.search_query || ''), message: language === 'en' ? "Searching library..." : "Mencari di koleksi..." };
     }
-    const msg = language === 'en' ? "Danggo doesn't understand that instruction." : "Danggo tidak mengerti instruksi itu.";
-    return { type: 'NONE', message: msg };
+    return { type: 'NONE', message: "..." };
 }
