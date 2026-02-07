@@ -1,4 +1,3 @@
-
 name: Build Android APK
 
 on:
@@ -25,19 +24,25 @@ jobs:
     - name: Build React App
       run: npm run build
 
-    - name: Initialize Capacitor Android
+    - name: Sync Capacitor
       run: |
         npx cap add android || true
         npx cap sync android
-        npx cap update android
+
+    # --- LANGKAH SAKTI: INJECT PERMISSIONS ---
+    - name: Inject Android Permissions & Legacy Storage
+      run: |
+        MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+        # Tambah izin READ & WRITE
+        sed -i '/<data android:scheme="content" \/>/a \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" \/>' $MANIFEST_PATH
+        # Tambah requestLegacyExternalStorage="true" ke tag <application>
+        sed -i 's/<application/<application android:requestLegacyExternalStorage="true"/g' $MANIFEST_PATH
+        echo "✅ Permissions injected to AndroidManifest.xml"
 
     - name: Generate App Icons
       run: |
-        # Buat folder assets yang dibutuhkan @capacitor/assets secara manual
         mkdir -p assets
-        # Copy file icon Anda (icon-512.png) menjadi assets/icon.png agar terdeteksi otomatis
-        cp icon-512.png assets/icon.png
-        # Jalankan generate tanpa flag --icon (karena sudah otomatis baca dari folder assets)
+        cp icon-512.png assets/icon.png || true
         npx -y @capacitor/assets generate --android
 
     - name: Setup Java JDK
