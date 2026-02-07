@@ -73,8 +73,6 @@ const TranslationToolbar: React.FC<{
     </div>
 
     <div className="flex gap-2 w-full md:w-auto justify-end items-center">
-        {/* Save Status Removed as requested */}
-
         <select value={mode} onChange={(e) => onModeChange(e.target.value as any)} className={`appearance-none pl-3 pr-8 py-2 rounded-2xl text-xs font-bold border cursor-pointer outline-none transition-all ${mode === 'high_quality' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 border-indigo-100 dark:border-indigo-800 shadow-sm' : 'bg-card text-subtle border-border hover:border-gray-300 dark:hover:border-gray-600'}`}>
             <option value="standard">⚡ Standard</option>
             <option value="high_quality">💎 Novel (2-Pass)</option>
@@ -409,19 +407,27 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const handleSaveTranslation = async () => {
     if (!translatedText.trim()) return;
     setIsSaving(true);
-    const count = await countTranslationsByProjectId(activeProject.id);
-    const newTranslation: SavedTranslation = {
-      id: generateId(),
-      projectId: activeProject.id,
-      name: activeChapterId 
-        ? (epubChapters.find(c => c.id === activeChapterId)?.title || `Chapter ${count + 1}`) 
-        : `Chapter ${count + 1}`,
-      translatedText: translatedText,
-      timestamp: new Date().toISOString(),
-    };
-    await saveTranslationToDB(newTranslation);
-    setIsSaving(false);
-    showToastNotification(t('editor.saved'));
+    
+    try {
+        const count = await countTranslationsByProjectId(activeProject.id);
+        const newTranslation: SavedTranslation = {
+          id: generateId(),
+          projectId: activeProject.id,
+          name: activeChapterId 
+            ? (epubChapters.find(c => c.id === activeChapterId)?.title || `Chapter ${count + 1}`) 
+            : `Chapter ${count + 1}`,
+          translatedText: translatedText,
+          timestamp: new Date().toISOString(),
+        };
+        
+        await saveTranslationToDB(newTranslation);
+        showToastNotification(t('editor.saved')); // Tampilkan pesan sukses "TERSIMPAN!"
+    } catch (e: any) {
+        console.error("Save failed:", e);
+        setError(`Gagal menyimpan: ${e.message}`);
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const ReadingModeModal = () => {
@@ -676,8 +682,19 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 <button disabled={!isLoading && !sourceText.trim()} onClick={handleTranslate} className={`flex-grow py-3.5 md:py-4 font-serif font-bold tracking-widest text-sm rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex justify-center items-center gap-2 ${isLoading ? 'bg-red-500 text-white' : 'bg-charcoal text-paper'}`}>
                     {isLoading ? t('editor.stop') : t('editor.translate')}
                 </button>
-                <button disabled={isLoading || !translatedText.trim()} onClick={handleSaveTranslation} className="px-6 md:px-8 py-3.5 md:py-4 bg-paper text-charcoal font-bold text-sm rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50 shadow-soft border border-border">
-                    {isSaving ? t('editor.saved') : t('editor.save')}
+                <button 
+                  disabled={isLoading || isSaving || !translatedText.trim()} 
+                  onClick={handleSaveTranslation} 
+                  className="px-6 md:px-8 py-3.5 md:py-4 bg-paper text-charcoal font-bold text-sm rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50 shadow-soft border border-border flex items-center gap-2"
+                >
+                    {isSaving ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
+                        <span>{t('editor.saving')}</span>
+                      </>
+                    ) : (
+                      <span>{t('editor.save')}</span>
+                    )}
                 </button>
             </div>
          </div>

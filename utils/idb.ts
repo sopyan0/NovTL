@@ -62,13 +62,20 @@ export const deleteItem = async (storeName: string, id: string) => {
 };
 
 export const clearCacheOnly = async () => {
-  const db = await initIDB();
-  const stores = ['fs_cache', 'chapters', 'chat_history'];
-  const promises = stores.map(s => {
-    return new Promise((resolve) => {
-        const tx = db.transaction(s, 'readwrite');
-        tx.objectStore(s).clear().onsuccess = () => resolve(true);
-    });
-  });
-  await Promise.all(promises);
+  // REVISI: Menghapus database secara total agar benar-benar bersih
+  // Browser/Webview akan membuat ulang DB baru saat halaman direload
+  if (window.indexedDB) {
+      return new Promise((resolve) => {
+          // Tutup koneksi aktif jika ada (best effort)
+          initIDB().then(db => db.close()).catch(() => {});
+          
+          const req = window.indexedDB.deleteDatabase(DB_NAME);
+          req.onsuccess = () => resolve(true);
+          req.onerror = () => resolve(false);
+          req.onblocked = () => {
+              console.warn("Delete DB blocked, reloading anyway might fix it.");
+              resolve(false);
+          };
+      });
+  }
 };

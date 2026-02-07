@@ -21,6 +21,7 @@ export const TRANSLATIONS = {
       stop: "STOP",
       translate: "TRANSLATE",
       save: "SAVE",
+      saving: "Saving...",
       saved: "SAVED!",
       paste: "PASTE", 
       instruction: "Instruction / Style",
@@ -97,7 +98,8 @@ export const TRANSLATIONS = {
         desc: "NovTL uses Hybrid Storage for safety and speed.",
         step1: "Physical Files: All data is saved in your 'Documents/NovTL' folder. You can backup this folder manually.",
         step2: "Hybrid Cache: We use a local database (IndexedDB) to make opening thousands of chapters feel instant.",
-        step3: "Maintenance: If the app feels slow, use 'Clear Cache' in Settings. Your physical files are ALWAYS safe."
+        step3: "Maintenance: If the app feels slow, use 'Clear Cache' in Settings. Your physical files are ALWAYS safe.",
+        step4: "Export: EPUB/TXT files on Android will appear in 'Download/NovTL_Export'."
       },
       faq: {
         q1: "Is this free?",
@@ -130,6 +132,7 @@ export const TRANSLATIONS = {
       stop: "BERHENTI",
       translate: "TERJEMAHKAN",
       save: "SIMPAN",
+      saving: "Menyimpan...",
       saved: "TERSIMPAN!",
       paste: "TEMPEL",
       instruction: "Instruksi / Gaya Bahasa",

@@ -152,6 +152,8 @@ class DatabaseService {
             const query = `INSERT OR REPLACE INTO projects (id, name, sourceLanguage, targetLanguage, translationInstruction, last_modified) VALUES (?, ?, ?, ?, ?, ?)`;
             await this.db.run(query, [project.id, project.name, project.sourceLanguage, project.targetLanguage, project.translationInstruction, Date.now()]);
             
+            // OPTIMIZED GLOSSARY SAVING (Batch Transaction)
+            await this.db.execute('BEGIN TRANSACTION');
             await this.db.run(`DELETE FROM glossary WHERE project_id = ?`, [project.id]);
             if (project.glossary.length > 0) {
                 const statements = project.glossary.map(item => ({
@@ -160,6 +162,7 @@ class DatabaseService {
                 }));
                 await this.db.executeSet(statements);
             }
+            await this.db.execute('COMMIT');
         } else {
             const db = await this.getWebDB();
             const tx = db.transaction('projects', 'readwrite');
@@ -195,7 +198,7 @@ class DatabaseService {
         }
     }
 
-    // --- CRUD CHAPTERS ---
+    // --- CRUD CHAPTERS (OPTIMIZED) ---
     async saveChapter(chapter: SavedTranslation): Promise<void> {
         if (this.isNative && this.db) {
             try {
@@ -205,17 +208,17 @@ class DatabaseService {
                 await this.db.run(`INSERT OR REPLACE INTO chapters (id, project_id, name, timestamp) VALUES (?, ?, ?, ?)`, 
                     [chapter.id, chapter.projectId, chapter.name, chapter.timestamp]);
 
-                // Content (Clean Slate)
+                // Content Clean Slate
                 await this.db.run(`DELETE FROM chapter_contents WHERE chapter_id = ?`, [chapter.id]);
 
-                // Content (Insert Lines)
-                const lines = chapter.translatedText.split('\n');
-                const statements = lines.map((line, idx) => ({
-                    statement: `INSERT INTO chapter_contents (id, chapter_id, line_index, text_content) VALUES (?, ?, ?, ?)`,
-                    values: [generateId(), chapter.id, idx, line]
-                }));
+                // OPTIMIZATION: Simpan seluruh teks dalam 1 row saja.
+                // SQLite bisa menampung teks sangat panjang dalam 1 kolom TEXT.
+                // Memecah menjadi ribuan baris (insert ribuan kali) adalah penyebab aplikasi hang/macet.
+                await this.db.run(
+                    `INSERT INTO chapter_contents (id, chapter_id, line_index, text_content) VALUES (?, ?, ?, ?)`,
+                    [generateId(), chapter.id, 0, chapter.translatedText]
+                );
                 
-                if (statements.length > 0) await this.db.executeSet(statements);
                 await this.db.execute('COMMIT');
             } catch (e) {
                 await this.db.execute('ROLLBACK');
@@ -253,8 +256,10 @@ class DatabaseService {
             if (!resMeta.values || resMeta.values.length === 0) return undefined;
             const meta = resMeta.values[0];
 
-            // Reconstruct text from rows
+            // Reconstruct text
             const resContent = await this.db.query(`SELECT text_content FROM chapter_contents WHERE chapter_id = ? ORDER BY line_index ASC`, [id]);
+            
+            // Logic ini kompatibel baik untuk versi lama (banyak baris) maupun versi baru (1 baris)
             const fullText = (resContent.values || []).map((row: any) => row.text_content).join('\n');
 
             return {

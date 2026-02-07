@@ -54,6 +54,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         try {
             const fsProjects = await getProjectsFromDB();
             if (fsProjects.length > 0) {
+                // Merge logic: Don't just overwrite, ensure we keep active selection valid
                 parsedSettings.projects = fsProjects;
             }
         } catch (e) {}
@@ -117,6 +118,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const updateSettings = useCallback((updates: Partial<AppSettings> | ((prev: AppSettings) => AppSettings)) => {
     setSettings(prev => {
       const next = typeof updates === 'function' ? updates(prev) : { ...prev, ...updates };
+      
+      // Jika ada penambahan project baru via settings update biasa (fallback case), paksa save ke DB
+      if (next.projects.length > prev.projects.length) {
+          const newProj = next.projects.find(p => !prev.projects.some(old => old.id === p.id));
+          if (newProj) saveProjectToDB(newProj).catch(console.error);
+      }
+      
       return next;
     });
   }, []);
@@ -129,10 +137,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       const oldProject = prev.projects[projectIndex];
       const updatedProjectData = typeof updates === 'function' ? updates(oldProject) : { ...oldProject, ...updates };
       
-      saveProjectToDB(updatedProjectData);
+      // ALWAYS SAVE TO DB ON UPDATE
+      saveProjectToDB(updatedProjectData).catch(console.error);
 
       if (updatedProjectData.glossary !== oldProject.glossary) {
-          saveGlossaryToDB(projectId, updatedProjectData.glossary);
+          saveGlossaryToDB(projectId, updatedProjectData.glossary).catch(console.error);
       }
 
       const newProjects = [...prev.projects];

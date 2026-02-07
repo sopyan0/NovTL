@@ -124,18 +124,11 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleClearCache = async () => {
-      if(confirm("PERINGATAN: Tindakan ini akan menghapus database lokal (IndexedDB) dan memuat ulang data dari File Penyimpanan Fisik.\n\nJIKA PERMISSION ANDROID ANDA BERMASALAH SEBELUMNYA, DATA YANG BELUM TERSIMPAN FISIK BISA HILANG.\n\nLanjutkan?")) {
+      if(confirm("Tindakan ini akan me-reset performa aplikasi.\nDatabase lokal sementara akan dihapus dan dibangun ulang.\n\nData novel (Proyek/Glosarium) TIDAK AKAN HILANG.\n\nLanjutkan?")) {
           setIsCleaningCache(true);
           await clearCacheOnly();
           setIsCleaningCache(false);
-          alert("Cache Database dibersihkan. Aplikasi akan mencoba memuat ulang data dari file fisik.");
-          window.location.reload();
-      }
-  }
-
-  const handleResetApp = async () => {
-      if(confirm("PERINGATAN: Ini akan menghapus seluruh data proyek. Lanjutkan?")) {
-          await wipeAllLocalData();
+          // Force reload to rebuild state
           window.location.reload();
       }
   }
@@ -407,10 +400,10 @@ const SettingsPage: React.FC = () => {
          </div>
          <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-4">
              <div>
-                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Reset Database Cache?</p>
+                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Reset Cache Aplikasi?</p>
                 <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">
-                    Akan menghapus "memori cepat" aplikasi dan memaksa baca ulang dari file fisik. 
-                    <strong className="block mt-1">Gunakan hanya jika data terasa tidak sinkron.</strong>
+                    Akan membangun ulang database lokal. Gunakan jika aplikasi terasa "nyangkut".
+                    <strong className="block mt-1">Data novel aman.</strong>
                 </p>
              </div>
              <button 
@@ -421,10 +414,7 @@ const SettingsPage: React.FC = () => {
                  {isCleaningCache ? 'Membersihkan...' : 'Reset Cache'}
              </button>
          </div>
-         <div className="pt-4 border-t border-border flex justify-between items-center">
-             <button onClick={handleResetApp} className="text-[10px] font-bold text-red-400 hover:text-red-600 underline">
-                 HAPUS SEMUA DATA & RESET APLIKASI
-             </button>
+         <div className="pt-4 border-t border-border flex justify-end items-center">
              <span className="text-[10px] text-subtle font-mono">v3.2.0-hybrid</span>
          </div>
       </section>
