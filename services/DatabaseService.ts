@@ -73,17 +73,15 @@ class DatabaseService {
 
                 await this.db.open();
 
-                // PERBAIKAN AI 1: Aktifkan Foreign Keys & WAL Mode (Write-Ahead Logging) untuk performa concurrency
+                // PERBAIKAN: Hapus WAL Mode yang menyebabkan crash "cannot change into wal mode from within a transaction"
+                // Cukup aktifkan Foreign Key saja agar data konsisten.
                 await this.db.execute('PRAGMA foreign_keys = ON;');
-                await this.db.execute('PRAGMA journal_mode = WAL;');
                 
                 await this.db.execute(SCHEMA);
                 
                 await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_contents_chapter_id ON chapter_contents(chapter_id);`);
-                // PERBAIKAN AI 2: HAPUS INDEX PADA TEXT CONTENT (Bikin lambat insert & bloat DB)
-                // Search manual pakai LIKE %..% sudah cukup untuk use case offline ringan.
                 
-                console.log("🔥 SQLite Native Initialized (Robust Mode + FK)");
+                console.log("🔥 SQLite Native Initialized (Stable Mode)");
             } catch (e) {
                 console.error("SQLite Init Error:", e);
                 throw e; 
@@ -99,7 +97,6 @@ class DatabaseService {
             const request = indexedDB.open(this.dbName, 6); // Version bumped
             request.onupgradeneeded = (event: any) => {
                 const db = event.target.result;
-                // PERBAIKAN AI 3: Samakan struktur Web dengan Native
                 if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
                 if (!db.objectStoreNames.contains('chapters')) db.createObjectStore('chapters', { keyPath: 'id' });
                 if (!db.objectStoreNames.contains('chat')) db.createObjectStore('chat', { keyPath: 'id' });
@@ -177,22 +174,14 @@ class DatabaseService {
             
             tx.objectStore('projects').put(project);
             
-            // Web Logic: Simpan glossary terpisah jika ingin parity, 
-            // tapi untuk performa web, menyimpan di dalam object project juga oke.
-            // Di sini kita simpan juga ke store 'glossary' agar query terpisah bisa jalan.
             const glosStore = tx.objectStore('glossary');
-            
-            // Hapus yang lama (Manual filter delete agak berat di IDB, kita skip delete bulk demi performa di web, overwrite key based)
-            // Idealnya IDB pakai index cursor, tapi untuk MVP Web:
             project.glossary.forEach(g => glosStore.put({ ...g, project_id: project.id }));
         }
     }
 
     async getProjects(): Promise<NovelProject[]> {
         if (this.isNative && this.db) {
-            // PERBAIKAN AI 4: N+1 Query Fix. 
-            // Ambil semua project dan semua glossary dalam 2 query, lalu map di memory (Jauh lebih cepat daripada looping query).
-            
+            // Optimasi N+1 Query
             const projectsRes = await this.db.query(`SELECT * FROM projects ORDER BY last_modified DESC`);
             const projects = projectsRes.values || [];
             
@@ -201,7 +190,6 @@ class DatabaseService {
             const glossaryRes = await this.db.query(`SELECT * FROM glossary`);
             const allGlossaries = glossaryRes.values || [];
 
-            // Mapping glossary ke project yang sesuai
             return projects.map((p: any) => {
                 const projectGlossary = allGlossaries
                     .filter((g: any) => g.project_id === p.id)
@@ -233,21 +221,16 @@ class DatabaseService {
     // --- CRUD CHAPTERS ---
     async saveChapter(chapter: SavedTranslation): Promise<void> {
         if (this.isNative && this.db) {
-            // FIX: INI PERBAIKAN UTAMA UNTUK ERROR "EXECUTE CANNOT COMMIT"
-            // Menggunakan executeSet membuat transaksi dikelola oleh Plugin secara otomatis dan aman.
-            
+            // FIX: Gunakan executeSet agar transaksi aman dan tidak tabrakan dengan auto-save
             const statements = [
-                // 1. Simpan Metadata
                 {
                     statement: `INSERT OR REPLACE INTO chapters (id, project_id, name, timestamp) VALUES (?, ?, ?, ?)`,
                     values: [chapter.id, chapter.projectId, chapter.name, chapter.timestamp]
                 },
-                // 2. Bersihkan konten lama
                 {
                     statement: `DELETE FROM chapter_contents WHERE chapter_id = ?`,
                     values: [chapter.id]
                 },
-                // 3. Masukkan konten baru (Optimasi 1 row per chapter)
                 {
                     statement: `INSERT INTO chapter_contents (id, chapter_id, line_index, text_content) VALUES (?, ?, ?, ?)`,
                     values: [generateId(), chapter.id, 0, chapter.translatedText]
@@ -304,8 +287,6 @@ class DatabaseService {
 
     async searchChaptersContent(projectId: string, query: string): Promise<SavedTranslation[]> {
         if (this.isNative && this.db) {
-            // Karena index dihapus, query ini akan full scan. Tapi untuk penggunaan personal (local), ini masih sangat cepat (< 100ms untuk ratusan bab).
-            // Jika butuh lebih cepat nanti, bisa implementasi FTS5 Virtual Table.
             const sql = `
                 SELECT DISTINCT c.id 
                 FROM chapter_contents cc
@@ -338,7 +319,6 @@ class DatabaseService {
 
     async deleteChapter(id: string): Promise<void> {
         if (this.isNative && this.db) {
-            // Karena ON DELETE CASCADE sudah aktif, cukup hapus parent-nya.
             await this.db.run(`DELETE FROM chapters WHERE id = ?`, [id]);
         } else {
             const db = await this.getWebDB();
