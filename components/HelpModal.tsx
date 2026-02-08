@@ -111,6 +111,10 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             {activeTab === 'faq' && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                     <div>
+                        <h4 className="font-bold text-charcoal">{t('help.faq.q4')}</h4>
+                        <p className="text-subtle text-sm bg-orange-50 dark:bg-orange-900/10 p-2 rounded-lg border border-orange-100 dark:border-orange-900/20">{t('help.faq.a4')}</p>
+                    </div>
+                    <div>
                         <h4 className="font-bold text-charcoal">{t('help.faq.q1')}</h4>
                         <p className="text-subtle text-sm">{t('help.faq.a1')}</p>
                     </div>

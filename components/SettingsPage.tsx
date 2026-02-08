@@ -6,7 +6,8 @@ import ConfirmDialog from './ConfirmDialog';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { clearCacheOnly } from '../utils/idb';
-import { getTranslationsByProjectId, saveTranslationToDB, saveGlossaryToDB, wipeAllLocalData } from '../utils/storage';
+import { getTranslationsByProjectId, saveTranslationToDB, saveGlossaryToDB } from '../utils/storage';
+import { triggerDownload } from '../utils/fileSystem';
 
 const API_KEY_LINKS: Record<string, string> = {
     'Gemini': 'https://aistudio.google.com/app/apikey',
@@ -86,7 +87,7 @@ const SettingsPage: React.FC = () => {
 
   const handleDeleteProject = () => {
       if (settings.projects.length <= 1) {
-          alert("Harus ada minimal satu proyek!");
+          alert(t('settings.project.deleteConfirm'));
           setIsConfirmDeleteProjectOpen(false);
           return;
       }
@@ -124,7 +125,7 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleClearCache = async () => {
-      if(confirm("Tindakan ini akan me-reset performa aplikasi.\nDatabase lokal sementara akan dihapus dan dibangun ulang.\n\nData novel (Proyek/Glosarium) TIDAK AKAN HILANG.\n\nLanjutkan?")) {
+      if(confirm(t('settings.storage.resetCacheDesc'))) {
           setIsCleaningCache(true);
           await clearCacheOnly();
           setIsCleaningCache(false);
@@ -146,10 +147,9 @@ const SettingsPage: React.FC = () => {
         };
         const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
         const safeName = project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const { triggerDownload } = await import('../utils/fileSystem');
         await triggerDownload(`backup_${safeName}.json`, blob);
       } catch (e) {
-        alert("Export gagal.");
+        alert(t('settings.storage.failImport'));
       }
   };
 
@@ -172,9 +172,9 @@ const SettingsPage: React.FC = () => {
               for (const t of data.translations) {
                   await saveTranslationToDB({ ...t, projectId: newProjectId });
               }
-              alert("Data berhasil dipulihkan!");
+              alert(t('settings.storage.successImport'));
           } catch (err) {
-              alert("Gagal memproses file backup.");
+              alert(t('settings.storage.failImport'));
           } finally {
               if (fileInputRef.current) fileInputRef.current.value = '';
           }
@@ -212,9 +212,9 @@ const SettingsPage: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10 mb-6">
             <div className="w-full">
                 <h2 className="text-xl md:text-2xl font-serif font-bold flex items-center gap-2 text-charcoal">
-                   📂 Proyek Novel
+                   📂 {t('settings.project.title')}
                 </h2>
-                <p className="text-subtle text-xs mt-1 tracking-wide">Kelola novel yang sedang Anda kerjakan.</p>
+                <p className="text-subtle text-xs mt-1 tracking-wide">{t('settings.project.desc')}</p>
             </div>
             
             <div className="flex items-center gap-3 w-full md:w-auto">
@@ -226,13 +226,13 @@ const SettingsPage: React.FC = () => {
                     <button onClick={() => setLanguage('id')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${language === 'id' ? 'bg-charcoal text-paper shadow-md' : 'text-subtle'}`}>ID</button>
                 </div>
                 {!isCreatingProject ? (
-                    <button onClick={() => setIsCreatingProject(true)} className="bg-charcoal text-paper px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all whitespace-nowrap">+ Proyek Baru</button>
+                    <button onClick={() => setIsCreatingProject(true)} className="bg-charcoal text-paper px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all whitespace-nowrap">{t('settings.project.new')}</button>
                 ) : (
                     <div className="flex flex-col sm:flex-row gap-2 w-full">
-                        <input type="text" placeholder="Nama Proyek..." className="p-2.5 rounded-xl bg-card text-charcoal text-sm border-2 border-accent outline-none flex-grow min-w-0" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} autoFocus />
+                        <input type="text" placeholder={t('settings.project.placeholder')} className="p-2.5 rounded-xl bg-card text-charcoal text-sm border-2 border-accent outline-none flex-grow min-w-0" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} autoFocus />
                         <div className="flex gap-2">
-                            <button onClick={handleCreateProject} className="bg-accent px-4 py-2 rounded-xl text-white text-xs font-bold flex-1 sm:flex-none shadow-glow">OK</button>
-                            <button onClick={() => setIsCreatingProject(false)} className="bg-gray-200 text-charcoal px-4 py-2 rounded-xl text-xs font-bold flex-1 sm:flex-none">Batal</button>
+                            <button onClick={handleCreateProject} className="bg-accent px-4 py-2 rounded-xl text-white text-xs font-bold flex-1 sm:flex-none shadow-glow">{t('common.ok')}</button>
+                            <button onClick={() => setIsCreatingProject(false)} className="bg-gray-200 text-charcoal px-4 py-2 rounded-xl text-xs font-bold flex-1 sm:flex-none">{t('common.cancel')}</button>
                         </div>
                     </div>
                 )}
@@ -269,9 +269,9 @@ const SettingsPage: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-border">
             <div>
                 <h2 className="text-xl font-serif font-bold text-charcoal flex items-center gap-2">
-                    📖 Glosarium / Kamus
+                    📖 {t('settings.glossary.title')}
                 </h2>
-                <p className="text-subtle text-xs mt-1">AI akan konsisten menggunakan istilah ini.</p>
+                <p className="text-subtle text-xs mt-1">{t('settings.glossary.desc')}</p>
             </div>
             
             <div className="flex items-center gap-2 w-full md:w-auto">
@@ -280,24 +280,24 @@ const SettingsPage: React.FC = () => {
                         onClick={handleSelectAll} 
                         className="px-4 py-2 text-xs font-bold text-subtle hover:text-charcoal bg-card border border-border rounded-xl transition-all"
                     >
-                        {selectedIds.size === filteredGlossary.length ? 'Batal Semua' : 'Pilih Semua'}
+                        {selectedIds.size === filteredGlossary.length ? t('settings.glossary.deselectAll') : t('settings.glossary.selectAll')}
                     </button>
                 )}
 
                 {selectedIds.size > 0 ? (
                     <div className="flex gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
                         <button onClick={() => setSelectedIds(new Set())} className="bg-gray-200 dark:bg-gray-800 text-charcoal px-4 py-2 rounded-xl font-bold text-xs hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
-                            Batal Pilih
+                            {t('settings.glossary.deselectAll')}
                         </button>
                         <button onClick={() => setIsConfirmBulkDeleteOpen(true)} className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg hover:bg-red-600 transition-colors">
-                            Hapus Terpilih ({selectedIds.size})
+                            {t('settings.glossary.deleteSelected')} ({selectedIds.size})
                         </button>
                     </div>
                 ) : (
                     <div className="relative w-full md:w-48">
                         <input 
                             type="text" 
-                            placeholder="Cari kata..." 
+                            placeholder={t('settings.glossary.searchPlaceholder')} 
                             value={glossarySearchTerm}
                             onChange={(e) => setGlossarySearchTerm(e.target.value)}
                             className="w-full px-3 py-2 bg-card border border-border rounded-xl text-xs outline-none focus:border-accent transition-colors text-charcoal"
@@ -311,7 +311,7 @@ const SettingsPage: React.FC = () => {
         <div className="bg-gray-100 dark:bg-black p-4 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col md:flex-row items-center gap-3 shadow-inner">
           <input 
             type="text" 
-            placeholder="Istilah Asli" 
+            placeholder={t('settings.glossary.sourcePlaceholder')} 
             className="flex-grow w-full md:w-auto p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-charcoal dark:text-white text-sm outline-none focus:border-accent placeholder-gray-500 font-medium" 
             value={newWord} 
             onChange={(e) => setNewWord(e.target.value)} 
@@ -319,7 +319,7 @@ const SettingsPage: React.FC = () => {
           <span className="text-gray-500">➜</span>
           <input 
             type="text" 
-            placeholder="Terjemahan" 
+            placeholder={t('settings.glossary.targetPlaceholder')} 
             className="flex-grow w-full md:w-auto p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-charcoal dark:text-white text-sm outline-none focus:border-accent placeholder-gray-500 font-medium" 
             value={newTrans} 
             onChange={(e) => setNewTrans(e.target.value)} 
@@ -328,7 +328,7 @@ const SettingsPage: React.FC = () => {
             onClick={() => { if(newWord && newTrans) { addGlossaryItem(newWord, newTrans); setNewWord(''); setNewTrans(''); }}} 
             className="w-full md:w-auto bg-charcoal text-paper px-6 py-3 rounded-xl font-bold text-sm shadow-lg border-2 border-transparent hover:border-charcoal hover:bg-paper hover:text-charcoal active:scale-95 transition-all whitespace-nowrap"
           >
-            + Tambah
+            {t('settings.glossary.add')}
           </button>
         </div>
 
@@ -362,7 +362,7 @@ const SettingsPage: React.FC = () => {
                     <button 
                         onClick={() => { setGlossaryItemToDeleteId(item.id); setIsConfirmDeleteGlossaryOpen(true); }} 
                         className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-                        title="Hapus item ini"
+                        title={t('common.delete')}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -372,7 +372,7 @@ const SettingsPage: React.FC = () => {
             ))}
             {filteredGlossary.length === 0 && (
                 <div className="text-center py-8 text-subtle text-sm italic opacity-50 border-2 border-dashed border-border rounded-xl">
-                    Belum ada kata di glosarium.
+                    {t('settings.glossary.empty')}
                 </div>
             )}
         </div>
@@ -380,19 +380,19 @@ const SettingsPage: React.FC = () => {
 
       {/* DATA MANAGEMENT & AI CONFIG (EXISTING) */}
       <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-charcoal">
-         <h2 className="text-xl font-serif font-bold text-charcoal">💾 Penyimpanan Lokal</h2>
+         <h2 className="text-xl font-serif font-bold text-charcoal">💾 {t('settings.storage.title')}</h2>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <button onClick={handleExportProject} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
-                     <p className="font-bold text-charcoal">Ekspor Backup (.json)</p>
-                     <p className="text-xs text-subtle">Simpan data ke file untuk dipindah.</p>
+                     <p className="font-bold text-charcoal">{t('settings.storage.export')}</p>
+                     <p className="text-xs text-subtle">{t('settings.storage.exportDesc')}</p>
                  </div>
                  <span className="text-2xl">📤</span>
              </button>
              <button onClick={handleImportClick} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
-                     <p className="font-bold text-charcoal">Impor Backup (.json)</p>
-                     <p className="text-xs text-subtle">Pulihkan data dari file eksternal.</p>
+                     <p className="font-bold text-charcoal">{t('settings.storage.import')}</p>
+                     <p className="text-xs text-subtle">{t('settings.storage.importDesc')}</p>
                  </div>
                  <span className="text-2xl">📥</span>
              </button>
@@ -400,10 +400,9 @@ const SettingsPage: React.FC = () => {
          </div>
          <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-4">
              <div>
-                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">Reset Cache Aplikasi?</p>
+                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">{t('settings.storage.resetCache')}</p>
                 <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">
-                    Akan membangun ulang database lokal. Gunakan jika aplikasi terasa "nyangkut".
-                    <strong className="block mt-1">Data novel aman.</strong>
+                    {t('settings.storage.resetCacheDesc')}
                 </p>
              </div>
              <button 
@@ -411,7 +410,7 @@ const SettingsPage: React.FC = () => {
                 disabled={isCleaningCache}
                 className="bg-indigo-600 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 disabled:opacity-50"
              >
-                 {isCleaningCache ? 'Membersihkan...' : 'Reset Cache'}
+                 {isCleaningCache ? t('settings.storage.clearing') : t('settings.storage.resetButton')}
              </button>
          </div>
          <div className="pt-4 border-t border-border flex justify-end items-center">
@@ -421,33 +420,33 @@ const SettingsPage: React.FC = () => {
 
       {/* AI CONFIGURATION (EXISTING) */}
       <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-charcoal">
-        <h2 className="text-xl font-serif font-bold text-charcoal pb-2 border-b border-gray-100">⚙️ Konfigurasi AI</h2>
+        <h2 className="text-xl font-serif font-bold text-charcoal pb-2 border-b border-gray-100">⚙️ {t('settings.ai.title')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">Penyedia AI</label>
+                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">{t('settings.ai.provider')}</label>
                 <select value={settings.activeProvider} onChange={(e) => updateGlobalSetting('activeProvider', e.target.value)} className="w-full p-4 rounded-2xl bg-charcoal text-paper text-sm font-bold outline-none appearance-none">
                     {LLM_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
             </div>
             <div className="space-y-2">
-                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">Model</label>
+                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">{t('settings.ai.model')}</label>
                 <select value={settings.selectedModel[settings.activeProvider] || DEFAULT_MODELS[settings.activeProvider]} onChange={(e) => updateModel(settings.activeProvider, e.target.value)} className="w-full p-4 rounded-2xl bg-card border border-border text-charcoal text-sm font-bold outline-none appearance-none">
                     {(PROVIDER_MODELS[settings.activeProvider] || []).map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
             </div>
             <div className="md:col-span-2 space-y-2">
                 <div className="flex justify-between items-end mb-1">
-                    <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">API Key ({settings.activeProvider})</label>
-                    <a href={API_KEY_LINKS[settings.activeProvider] || '#'} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600 hover:underline">Ambil Key ↗</a>
+                    <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">{t('settings.ai.apiKey')} ({settings.activeProvider})</label>
+                    <a href={API_KEY_LINKS[settings.activeProvider] || '#'} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-indigo-600 hover:underline">{t('settings.ai.getKey')}</a>
                 </div>
-                <input type="password" placeholder="Tempel API Key di sini..." value={settings.apiKeys[settings.activeProvider] || ''} onChange={(e) => updateApiKey(settings.activeProvider, e.target.value)} className="w-full p-4 rounded-2xl bg-card border-2 border-transparent focus:border-accent outline-none text-sm font-mono shadow-inner-light" />
+                <input type="password" placeholder={t('editor.apiKeyPlaceholder')} value={settings.apiKeys[settings.activeProvider] || ''} onChange={(e) => updateApiKey(settings.activeProvider, e.target.value)} className="w-full p-4 rounded-2xl bg-card border-2 border-transparent focus:border-accent outline-none text-sm font-mono shadow-inner-light" />
             </div>
         </div>
       </section>
 
-      <ConfirmDialog isOpen={isConfirmDeleteGlossaryOpen} onClose={() => setIsConfirmDeleteGlossaryOpen(false)} onConfirm={() => { updateProject(activeProject.id, prev => ({ ...prev, glossary: prev.glossary.filter(i => i.id !== glossaryItemToDeleteId) })); setGlossaryItemToDeleteId(null); }} title="Hapus Kata?" message="Yakin ingin menghapus kata ini dari glosarium?" isDestructive={true} />
-      <ConfirmDialog isOpen={isConfirmBulkDeleteOpen} onClose={() => setIsConfirmBulkDeleteOpen(false)} onConfirm={() => { updateProject(activeProject.id, prev => ({ ...prev, glossary: prev.glossary.filter(i => !selectedIds.has(i.id)) })); setSelectedIds(new Set()); }} title="Hapus Terpilih?" message="Yakin ingin menghapus semua kata yang dipilih?" isDestructive={true} />
-      <ConfirmDialog isOpen={isConfirmDeleteProjectOpen} onClose={() => setIsConfirmDeleteProjectOpen(false)} onConfirm={handleDeleteProject} title="Hapus Proyek?" message="Menghapus proyek akan menghilangkan seluruh glosarium di dalamnya." isDestructive={true} />
+      <ConfirmDialog isOpen={isConfirmDeleteGlossaryOpen} onClose={() => setIsConfirmDeleteGlossaryOpen(false)} onConfirm={() => { updateProject(activeProject.id, prev => ({ ...prev, glossary: prev.glossary.filter(i => i.id !== glossaryItemToDeleteId) })); setGlossaryItemToDeleteId(null); }} title={t('settings.glossary.confirmDeleteTitle')} message={t('settings.glossary.confirmDeleteMsg')} isDestructive={true} />
+      <ConfirmDialog isOpen={isConfirmBulkDeleteOpen} onClose={() => setIsConfirmBulkDeleteOpen(false)} onConfirm={() => { updateProject(activeProject.id, prev => ({ ...prev, glossary: prev.glossary.filter(i => !selectedIds.has(i.id)) })); setSelectedIds(new Set()); }} title={t('settings.glossary.confirmBulkDeleteTitle')} message={t('settings.glossary.confirmBulkDeleteMsg')} isDestructive={true} />
+      <ConfirmDialog isOpen={isConfirmDeleteProjectOpen} onClose={() => setIsConfirmDeleteProjectOpen(false)} onConfirm={handleDeleteProject} title={t('settings.project.deleteTitle')} message={t('settings.project.deleteMsg')} isDestructive={true} />
     </div>
   );
 };

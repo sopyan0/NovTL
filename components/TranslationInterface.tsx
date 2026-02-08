@@ -78,13 +78,13 @@ const TranslationToolbar: React.FC<{
             <option value="high_quality">💎 Novel (2-Pass)</option>
         </select>
         <button onClick={onLoadEpub} className="text-xs font-bold tracking-wide transition flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-sm bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800">
-            📂 <span className="hidden sm:inline">Upload</span>
+            📂 <span className="hidden sm:inline">{t('editor.upload')}</span>
         </button>
         <button onClick={onToggleApi} className={`text-xs font-bold tracking-wide transition flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-sm ${!hasApiKey ? 'bg-red-50 text-red-600 border-red-100 animate-pulse' : showApi ? 'bg-charcoal text-paper border-charcoal' : 'bg-card text-subtle border-border hover:border-gray-300 dark:hover:border-gray-600 hover:text-charcoal'}`}>
-            {!hasApiKey ? '⚠️ API' : '🔑 API'}
+            {!hasApiKey ? `⚠️ ${t('editor.apiButton')}` : `🔑 ${t('editor.apiButton')}`}
         </button>
         <button onClick={onTogglePrompt} className={`text-xs font-bold tracking-wide transition flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-sm ${showPrompt ? 'bg-accent text-white border-accent' : 'bg-card text-accent border-border hover:border-accent/20'}`}>
-            ✨ <span className="hidden sm:inline">Prompt</span>
+            ✨ <span className="hidden sm:inline">{t('editor.promptButton')}</span>
         </button>
     </div>
   </div>
@@ -262,14 +262,14 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
           if (text) {
             setSourceText(text);
-            showToastNotification("Teks berhasil ditempel!");
+            showToastNotification(t('editor.txtLoaded'));
           } else {
-             showToastNotification("Clipboard kosong!");
+             showToastNotification(t('editor.clipboardEmpty'));
           }
       } catch (err: any) {
           console.error("Paste failed", err);
           if (err.name === 'NotAllowedError' || err.message?.includes('denied')) {
-            setError("Akses Clipboard diblokir. Coba tempel manual.");
+            setError(t('editor.clipboardError'));
           } else {
             setError("Gagal membaca Clipboard.");
           }
@@ -295,16 +295,16 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             await putItem('epub_files', { id: 'active_epub_file', blob: file });
             
             setIsEpubModalOpen(true);
-            showToastNotification(`Berhasil memuat ${chapters.length} Bab!`);
+            showToastNotification(`${t('editor.epubLoaded')} (${chapters.length})`);
         } catch (e: any) {
-            setError(`Gagal memuat EPUB: ${e.message}`);
+            setError(`${t('editor.epubLoadError')}: ${e.message}`);
         }
       } 
       else if (fileName.endsWith('.txt')) {
           try {
               const text = await file.text();
               setSourceText(text);
-              showToastNotification("File teks berhasil dimuat!");
+              showToastNotification(t('editor.txtLoaded'));
           } catch (e) {
               setError("Gagal membaca file teks.");
           }
@@ -370,7 +370,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           
           localStorage.removeItem('editor_scroll_index'); 
           setIsEpubModalOpen(false);
-          showToastNotification(`Bab dimuat: ${chapter.title}`);
+          showToastNotification(`${t('editor.epubLoaded')}: ${chapter.title}`);
       } catch (e) {
           alert("Gagal mengambil teks bab ini.");
       }
@@ -391,7 +391,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     if (isLoading) { handleStop(); return; }
     if (!sourceText.trim()) return;
     if (!hasValidApiKey(settings)) {
-        setError(`API Key for ${settings.activeProvider} is missing.`);
+        setError(`${settings.activeProvider} API Key Missing.`);
         setShowApiKeyInput(true);
         return;
     }
@@ -431,7 +431,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const handleCancelEdit = () => {
       setEditingId(null);
       setEditingName('');
-      showToastNotification("Mode Edit dibatalkan. Simpan berikutnya akan menjadi Bab Baru.");
+      showToastNotification(t('editor.cancelEdit'));
   };
 
   const handleSaveTranslation = async () => {
@@ -551,7 +551,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                     <p className="text-xs text-subtle mt-1">{epubChapters.length} bab terdeteksi.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={resetEpub} className="text-red-500 text-xs font-bold px-2">Reset</button>
+                    <button onClick={resetEpub} className="text-red-500 text-xs font-bold px-2">{t('common.reset')}</button>
                     <button onClick={() => setIsEpubModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">✕</button>
                 </div>
             </div>
@@ -586,7 +586,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center gap-3 px-1">
          <h2 className="text-2xl md:text-3xl font-serif font-bold text-charcoal tracking-tight truncate max-w-[70%]">{activeProject.name}</h2>
          <div className="flex items-center gap-2">
-             <div className="bg-card px-3 py-1.5 rounded-xl border border-border text-xs font-bold text-charcoal">📖 {glossaryCount} Glosarium</div>
+             <div className="bg-card px-3 py-1.5 rounded-xl border border-border text-xs font-bold text-charcoal">📖 {glossaryCount} {t('common.glossary')}</div>
              <div className="bg-card px-3 py-1.5 rounded-xl border border-border text-xs font-bold text-charcoal flex items-center gap-2">
                  <div className={`w-2 h-2 rounded-full ${hasApiKey ? 'bg-green-500' : 'bg-red-500'}`}></div>
                  <span>{activeModel}</span>
@@ -608,7 +608,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       {showApiKeyInput && (
         <div className="glass p-4 md:p-6 rounded-3xl animate-in slide-in-from-top-2 shadow-soft border-l-4 border-accent flex flex-col sm:flex-row gap-3 max-w-full overflow-hidden">
             <input type="password" placeholder={t('editor.apiKeyPlaceholder')} className="flex-grow p-4 rounded-2xl bg-paper/80 border border-border outline-none text-sm transition-all text-charcoal min-w-0" value={tempApiKey} onChange={(e) => setTempApiKey(e.target.value)} />
-            <button onClick={() => { updateSettings(prev => ({...prev, apiKeys: {...prev.apiKeys, [settings.activeProvider]: tempApiKey}})); setShowApiKeyInput(false); }} className="bg-charcoal text-paper px-6 py-3 rounded-2xl text-sm font-bold shadow-lg whitespace-nowrap">Save</button>
+            <button onClick={() => { updateSettings(prev => ({...prev, apiKeys: {...prev.apiKeys, [settings.activeProvider]: tempApiKey}})); setShowApiKeyInput(false); }} className="bg-charcoal text-paper px-6 py-3 rounded-2xl text-sm font-bold shadow-lg whitespace-nowrap">{t('common.save')}</button>
         </div>
       )}
 
@@ -624,7 +624,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
       {epubChapters.length > 0 && !isEpubModalOpen && (
           <div className="flex justify-center -mb-2">
-              <button onClick={() => setIsEpubModalOpen(true)} className="bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full text-xs font-bold border border-orange-200 shadow-sm hover:bg-orange-100 animate-in slide-in-from-top-2">📖 Kembali ke Daftar Bab EPUB</button>
+              <button onClick={() => setIsEpubModalOpen(true)} className="bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full text-xs font-bold border border-orange-200 shadow-sm hover:bg-orange-100 animate-in slide-in-from-top-2">{t('editor.backToEpub')}</button>
           </div>
       )}
 
@@ -659,14 +659,14 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             {/* DRAG OVERLAY */}
             <div className={`absolute inset-0 z-40 flex flex-col items-center justify-center bg-paper/90 backdrop-blur-sm transition-opacity duration-300 pointer-events-none ${isDragging ? 'opacity-100' : 'opacity-0'}`}>
                  <span className="text-5xl mb-4 animate-bounce">📂</span>
-                 <p className="text-accent font-bold text-lg">Lepaskan file di sini!</p>
-                 <p className="text-subtle text-xs">Support .EPUB & .TXT</p>
+                 <p className="text-accent font-bold text-lg">{t('editor.dragDrop')}</p>
+                 <p className="text-subtle text-xs">{t('editor.dragDropDesc')}</p>
             </div>
 
             {/* TEXTAREA (Z-INDEX 20) */}
             <textarea 
                 className="w-full h-full p-4 md:p-6 bg-transparent outline-none resize-none text-base md:text-lg font-serif leading-loose text-charcoal custom-scrollbar relative z-20 placeholder-gray-400/50" 
-                placeholder={isDragging ? "" : (isRestoring ? "Memuat novel Anda..." : "Mulai ketik di sini...")}
+                placeholder={isDragging ? "" : (isRestoring ? t('editor.restoring') : t('editor.placeholder'))}
                 value={sourceText} 
                 onChange={(e) => setSourceText(e.target.value)}
                 disabled={isRestoring}
@@ -676,9 +676,9 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             {!sourceText && !isRestoring && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
                     <span className="text-5xl mb-4 grayscale opacity-50">📝</span>
-                    <p className="font-serif text-lg text-charcoal font-bold mb-2">Editor Kosong</p>
+                    <p className="font-serif text-lg text-charcoal font-bold mb-2">{t('editor.emptyEditorTitle')}</p>
                     <p className="text-xs text-subtle max-w-[250px]">
-                        Ketik langsung, tempel teks, atau seret file novel Anda ke sini.
+                        {t('editor.emptyEditorDesc')}
                     </p>
                 </div>
             )}
@@ -687,7 +687,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-card/50 backdrop-blur-sm">
                     <div className="flex flex-col items-center">
                         <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mb-2"></div>
-                        <span className="text-xs font-bold text-subtle">Memulihkan Sesi...</span>
+                        <span className="text-xs font-bold text-subtle">{t('editor.restoring')}</span>
                     </div>
                 </div>
             )}

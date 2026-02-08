@@ -319,7 +319,7 @@ export default function SavedTranslationsPage() {
                     
                     <div className="flex items-center gap-2">
                         {isEditingContent ? (
-                            <button onClick={handleSaveContentEdit} className="bg-accent text-white px-4 py-2 rounded-lg font-bold text-xs shadow-md">Save</button>
+                            <button onClick={handleSaveContentEdit} className="bg-accent text-white px-4 py-2 rounded-lg font-bold text-xs shadow-md">{t('common.save')}</button>
                         ) : (
                             <div className="flex items-center gap-2 bg-card/80 p-1 rounded-full border border-border shadow-sm">
                                 <button onClick={() => setIsEditingContent(true)} className="p-2 text-charcoal hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" title="Edit Content">✎</button>
@@ -361,19 +361,19 @@ export default function SavedTranslationsPage() {
                         <div className="mt-24 pt-12 border-t border-border text-center pb-24">
                             {nextChapterSummary ? (
                                 <div>
-                                    <p className="text-subtle text-sm mb-4 uppercase tracking-widest font-bold">Lanjut Baca</p>
+                                    <p className="text-subtle text-sm mb-4 uppercase tracking-widest font-bold">{t('library.continueReading')}</p>
                                     <button 
                                         onClick={handleNextChapter}
                                         className="group relative inline-flex items-center justify-center px-8 py-5 font-serif font-bold text-paper transition-all duration-200 bg-charcoal font-lg rounded-2xl hover:bg-accent hover:shadow-glow hover:-translate-y-1 w-full md:w-auto"
                                     >
                                         <span className="mr-2">📖</span>
-                                        <span>Lanjut ke: {nextChapterSummary.name}</span>
+                                        <span>{nextChapterSummary.name}</span>
                                         <svg className="w-5 h-5 ml-2 -mr-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
                                     </button>
                                 </div>
                             ) : (
                                 <div className="text-subtle italic opacity-50">
-                                    <p>— Akhir dari Koleksi Saat Ini —</p>
+                                    <p>{t('library.endOfCollection')}</p>
                                 </div>
                             )}
                         </div>
@@ -391,7 +391,7 @@ export default function SavedTranslationsPage() {
           <div className="fixed inset-0 z-[10000] bg-black/20 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-card p-6 rounded-2xl shadow-xl flex items-center gap-4">
                   <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
-                  <span className="font-bold text-charcoal">Loading...</span>
+                  <span className="font-bold text-charcoal">{t('common.loading')}</span>
               </div>
           </div>
       )}
@@ -407,7 +407,7 @@ export default function SavedTranslationsPage() {
             {projectName}
           </h2>
           <p className="text-subtle mt-2 font-sans text-sm">
-            {isLoading ? 'Loading...' : `${localSummaries.length} ${t('library.chapters')}`}
+            {isLoading ? t('common.loading') : `${localSummaries.length} ${t('library.chapters')}`}
           </p>
         </div>
 
@@ -420,7 +420,7 @@ export default function SavedTranslationsPage() {
                 : 'bg-card text-charcoal border-border hover:bg-gray-50 dark:hover:bg-gray-800'
             }`}
           >
-            {isSelectionMode ? `Done (${selectedIds.size})` : 'Select Chapters'}
+            {isSelectionMode ? `${t('library.done')} (${selectedIds.size})` : t('library.selectChapters')}
           </button>
 
           <button
@@ -461,7 +461,7 @@ export default function SavedTranslationsPage() {
             <div className="flex w-full md:w-auto gap-3 items-center justify-between md:justify-end">
                 {isSelectionMode && (
                     <button onClick={selectAllVisible} className="text-xs font-bold text-accent hover:underline">
-                        Select All Visible
+                        {t('library.selectAllVisible')}
                     </button>
                 )}
                 

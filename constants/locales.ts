@@ -1,6 +1,23 @@
 
 export const TRANSLATIONS = {
   en: {
+    common: {
+      cancel: "Cancel",
+      confirm: "Confirm",
+      delete: "Delete",
+      save: "Save",
+      edit: "Edit",
+      close: "Close",
+      back: "Back",
+      reset: "Reset",
+      glossary: "Glossary",
+      loading: "Loading...",
+      ok: "OK",
+      yes: "Yes",
+      no: "No",
+      on: "ON",
+      off: "OFF"
+    },
     sidebar: {
       dashboard: "Home",
       editor: "Editor",
@@ -10,6 +27,22 @@ export const TRANSLATIONS = {
       plan: "Local Edition",
       help: "Help",
       logout: "Reset App"
+    },
+    dashboard: {
+      welcome: "Welcome",
+      quote: "Write a thousand words, translate a million worlds.",
+      lastEdited: "LAST EDITED",
+      continue: "Continue Writing",
+      stats: "Statistics",
+      totalProjects: "Total Projects",
+      totalGlossary: "Total Glossary Terms",
+      activeModel: "ACTIVE MODEL",
+      quickActions: "Quick Actions",
+      newProject: "New Project",
+      manageKeys: "Manage API Keys",
+      recentProjects: "Recent Projects",
+      terms: "terms",
+      active: "ACTIVE"
     },
     editor: {
       source: "Source Text",
@@ -28,10 +61,24 @@ export const TRANSLATIONS = {
       instructionPlaceholder: "E.g., Use Shakespearean style, maintain cultivation terms...",
       apiKeyError: "API Key Missing",
       apiKeyPlaceholder: "Paste API Key here...",
-      upload: "Upload File (.txt)",
+      upload: "Upload",
+      backToEpub: "📖 Back to EPUB Chapter List",
       focusMode: "FOCUS READ MODE",
       waiting: "Brewing words...",
-      emptyState: "Translation results will appear here."
+      emptyState: "Translation results will appear here.",
+      dragDrop: "Drop file here!",
+      dragDropDesc: "Support .EPUB & .TXT",
+      emptyEditorTitle: "Empty Editor",
+      emptyEditorDesc: "Type directly, paste text, or drag your novel file here.",
+      restoring: "Restoring Session...",
+      epubLoaded: "Chapter loaded",
+      epubLoadError: "Failed to load EPUB",
+      txtLoaded: "Text file loaded!",
+      clipboardError: "Clipboard access denied",
+      clipboardEmpty: "Clipboard is empty!",
+      apiButton: "API",
+      promptButton: "Prompt",
+      cancelEdit: "Cancel Edit (New Chapter)"
     },
     library: {
       bookshelf: "Bookshelf",
@@ -52,7 +99,60 @@ export const TRANSLATIONS = {
       confirmDeleteTitle: "Delete Chapter?",
       confirmDeleteMsg: "This chapter will be removed from your storage.",
       confirmClearTitle: "Clear Project?",
-      confirmClearMsg: "Are you sure you want to delete ALL chapters in this project?"
+      confirmClearMsg: "Are you sure you want to delete ALL chapters in this project?",
+      continueReading: "Continue Reading",
+      endOfCollection: "— End of Current Collection —",
+      selectChapters: "Select Chapters",
+      done: "Done",
+      selectAllVisible: "Select All Visible"
+    },
+    settings: {
+      project: {
+        title: "Novel Projects",
+        desc: "Manage the novels you are currently working on.",
+        new: "+ New Project",
+        placeholder: "Project Name...",
+        deleteConfirm: "Must have at least one project!",
+        deleteTitle: "Delete Project?",
+        deleteMsg: "Deleting this project will remove all its glossary terms.",
+        rename: "Rename"
+      },
+      glossary: {
+        title: "Glossary / Dictionary",
+        desc: "AI will consistently use these terms.",
+        selectAll: "Select All",
+        deselectAll: "Deselect All",
+        deleteSelected: "Delete Selected",
+        searchPlaceholder: "Search terms...",
+        sourcePlaceholder: "Original Term",
+        targetPlaceholder: "Translation",
+        add: "+ Add",
+        empty: "No terms in glossary yet.",
+        confirmDeleteTitle: "Delete Term?",
+        confirmDeleteMsg: "Are you sure you want to delete this term?",
+        confirmBulkDeleteTitle: "Delete Selected?",
+        confirmBulkDeleteMsg: "Are you sure you want to delete all selected terms?"
+      },
+      storage: {
+        title: "Local Storage",
+        export: "Export Backup (.json)",
+        exportDesc: "Save data to file for transfer.",
+        import: "Import Backup (.json)",
+        importDesc: "Restore data from external file.",
+        resetCache: "Reset App Cache?",
+        resetCacheDesc: "Rebuilds local database. Use if app feels 'stuck'. Novel data is safe.",
+        resetButton: "Reset Cache",
+        clearing: "Cleaning...",
+        successImport: "Data restored successfully!",
+        failImport: "Failed to process backup file."
+      },
+      ai: {
+        title: "AI Configuration",
+        provider: "AI Provider",
+        model: "Model",
+        apiKey: "API Key",
+        getKey: "Get Key ↗"
+      }
     },
     help: {
       title: "NovTL User Guide",
@@ -74,8 +174,8 @@ export const TRANSLATIONS = {
         step2Desc: "Use the 'Prompt' button to tell the AI how to translate (e.g. 'Captivating prose').",
         step3: "Glossary",
         step3Desc: "Add characters/terms in Settings. AI will strictly follow your dictionary.",
-        step4: "Translate & Save",
-        step4Desc: "Click Translate, then Save to store it permanently in your Library."
+        step4: "Translate & Save (Important!)",
+        step4Desc: "When editing an old chapter, the button says 'UPDATE'. To save as a NEW chapter copy, click the red 'X' button first."
       },
       api: {
         title: "Setting up the AI",
@@ -107,11 +207,30 @@ export const TRANSLATIONS = {
         q2: "Can I read offline?",
         a2: "Yes! Once saved, you can read your collection without an internet connection.",
         q3: "How to read on other apps?",
-        a3: "Use the 'Download EPUB' button. You can then open the file in Google Play Books or Moon+ Reader."
+        a3: "Use the 'Download EPUB' button. You can then open the file in Google Play Books or Moon+ Reader.",
+        q4: "Why does 'Save' become 'Update'?",
+        a4: "This is a safety feature to prevent overwriting. If you are editing an existing chapter, it defaults to Update. Click the red 'X' button to force save as a New Chapter."
       }
     }
   },
   id: {
+    common: {
+      cancel: "Batal",
+      confirm: "Konfirmasi",
+      delete: "Hapus",
+      save: "Simpan",
+      edit: "Ubah",
+      close: "Tutup",
+      back: "Kembali",
+      reset: "Reset",
+      glossary: "Glosarium",
+      loading: "Memuat...",
+      ok: "OK",
+      yes: "Ya",
+      no: "Tidak",
+      on: "NYALA",
+      off: "MATI"
+    },
     sidebar: {
       dashboard: "Beranda",
       editor: "Editor",
@@ -121,6 +240,22 @@ export const TRANSLATIONS = {
       plan: "Edisi Lokal",
       help: "Bantuan",
       logout: "Reset App"
+    },
+    dashboard: {
+      welcome: "Selamat Datang",
+      quote: "Tulis seribu kata, terjemahkan sejuta dunia.",
+      lastEdited: "TERAKHIR DIEDIT",
+      continue: "Lanjut Menerjemah",
+      stats: "Statistik",
+      totalProjects: "Total Proyek",
+      totalGlossary: "Total Istilah Glosarium",
+      activeModel: "MODEL AKTIF",
+      quickActions: "Aksi Cepat",
+      newProject: "Proyek Baru",
+      manageKeys: "Kelola API Key",
+      recentProjects: "Proyek Terkini",
+      terms: "istilah",
+      active: "AKTIF"
     },
     editor: {
       source: "Sumber",
@@ -139,10 +274,24 @@ export const TRANSLATIONS = {
       instructionPlaceholder: "Contoh: Gunakan gaya bahasa novel fantasi klasik...",
       apiKeyError: "API Key Hilang",
       apiKeyPlaceholder: "Tempel API Key di sini...",
-      upload: "Upload File (.txt)",
+      upload: "Upload",
+      backToEpub: "📖 Kembali ke Daftar Bab EPUB",
       focusMode: "BACA MODE FOKUS",
       waiting: "Sedang meracik kata...",
-      emptyState: "Hasil terjemahan akan muncul di sini."
+      emptyState: "Hasil terjemahan akan muncul di sini.",
+      dragDrop: "Lepaskan file di sini!",
+      dragDropDesc: "Support .EPUB & .TXT",
+      emptyEditorTitle: "Editor Kosong",
+      emptyEditorDesc: "Ketik langsung, tempel teks, atau seret file novel Anda ke sini.",
+      restoring: "Memulihkan Sesi...",
+      epubLoaded: "Bab dimuat",
+      epubLoadError: "Gagal memuat EPUB",
+      txtLoaded: "File teks berhasil dimuat!",
+      clipboardError: "Akses Clipboard diblokir",
+      clipboardEmpty: "Clipboard kosong!",
+      apiButton: "API",
+      promptButton: "Prompt",
+      cancelEdit: "Batal Edit (Buat Baru)"
     },
     library: {
       bookshelf: "Rak Buku",
@@ -163,7 +312,60 @@ export const TRANSLATIONS = {
       confirmDeleteTitle: "Hapus Bab?",
       confirmDeleteMsg: "Bab ini akan dihapus dari penyimpanan perangkat.",
       confirmClearTitle: "Bersihkan Proyek?",
-      confirmClearMsg: "Yakin ingin menghapus SEMUA bab di proyek ini?"
+      confirmClearMsg: "Yakin ingin menghapus SEMUA bab di proyek ini?",
+      continueReading: "Lanjut Baca",
+      endOfCollection: "— Akhir dari Koleksi Saat Ini —",
+      selectChapters: "Pilih Bab",
+      done: "Selesai",
+      selectAllVisible: "Pilih Semua Terlihat"
+    },
+    settings: {
+      project: {
+        title: "Proyek Novel",
+        desc: "Kelola novel yang sedang Anda kerjakan.",
+        new: "+ Proyek Baru",
+        placeholder: "Nama Proyek...",
+        deleteConfirm: "Harus ada minimal satu proyek!",
+        deleteTitle: "Hapus Proyek?",
+        deleteMsg: "Menghapus proyek akan menghilangkan seluruh glosarium di dalamnya.",
+        rename: "Ganti Nama"
+      },
+      glossary: {
+        title: "Glosarium / Kamus",
+        desc: "AI akan konsisten menggunakan istilah ini.",
+        selectAll: "Pilih Semua",
+        deselectAll: "Batal Pilih",
+        deleteSelected: "Hapus Terpilih",
+        searchPlaceholder: "Cari kata...",
+        sourcePlaceholder: "Istilah Asli",
+        targetPlaceholder: "Terjemahan",
+        add: "+ Tambah",
+        empty: "Belum ada kata di glosarium.",
+        confirmDeleteTitle: "Hapus Kata?",
+        confirmDeleteMsg: "Yakin ingin menghapus kata ini dari glosarium?",
+        confirmBulkDeleteTitle: "Hapus Terpilih?",
+        confirmBulkDeleteMsg: "Yakin ingin menghapus semua kata yang dipilih?"
+      },
+      storage: {
+        title: "Penyimpanan Lokal",
+        export: "Ekspor Backup (.json)",
+        exportDesc: "Simpan data ke file untuk dipindah.",
+        import: "Impor Backup (.json)",
+        importDesc: "Pulihkan data dari file eksternal.",
+        resetCache: "Reset Cache Aplikasi?",
+        resetCacheDesc: "Akan membangun ulang database lokal. Gunakan jika aplikasi terasa 'nyangkut'. Data novel aman.",
+        resetButton: "Reset Cache",
+        clearing: "Membersihkan...",
+        successImport: "Data berhasil dipulihkan!",
+        failImport: "Gagal memproses file backup."
+      },
+      ai: {
+        title: "Konfigurasi AI",
+        provider: "Penyedia AI",
+        model: "Model",
+        apiKey: "API Key",
+        getKey: "Ambil Key ↗"
+      }
     },
     help: {
       title: "Panduan Pengguna NovTL",
@@ -185,8 +387,8 @@ export const TRANSLATIONS = {
         step2Desc: "Gunakan tombol 'Prompt' untuk mengatur gaya bahasa (misal: 'Bahasa Novel Populer').",
         step3: "Glosarium",
         step3Desc: "Tambah nama karakter/istilah di Setelan agar AI tidak salah menerjemahkan.",
-        step4: "Terjemah & Simpan",
-        step4Desc: "Klik Terjemahkan, lalu klik Simpan untuk memasukkannya ke Koleksi secara permanen."
+        step4: "Terjemah & Aman Simpan (Penting!)",
+        step4Desc: "Jika Anda mengedit bab lama, tombol akan berubah menjadi 'UPDATE'. Untuk menyimpan sebagai BAB BARU (Copy), klik tombol 'X' merah di sebelahnya."
       },
       api: {
         title: "Menyiapkan Otak AI",
@@ -218,7 +420,9 @@ export const TRANSLATIONS = {
         q2: "Bisa baca offline?",
         a2: "Bisa! Setelah bab disimpan, Anda bisa membacanya tanpa koneksi internet.",
         q3: "Cara baca di aplikasi lain?",
-        a3: "Gunakan tombol 'Download EPUB' untuk dibuka di Google Play Books atau Moon+ Reader."
+        a3: "Gunakan tombol 'Download EPUB' untuk dibuka di Google Play Books atau Moon+ Reader.",
+        q4: "Kenapa tombol Simpan berubah jadi Update?",
+        a4: "Ini fitur pengaman agar bab tidak tertimpa tanpa sengaja. Jika tombolnya 'UPDATE', artinya Anda sedang mengedit bab lama. Klik tombol 'X' merah untuk memaksa simpan sebagai Bab Baru."
       }
     }
   }

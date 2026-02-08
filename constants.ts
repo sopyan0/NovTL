@@ -36,11 +36,11 @@ const DEFAULT_PROJECT_ID = 'default-project-001';
 
 const DEFAULT_PROJECT: NovelProject = {
   id: DEFAULT_PROJECT_ID,
-  name: 'New Novel',
+  name: 'Novel Baru',
   sourceLanguage: 'Auto Detect',
   targetLanguage: 'Indonesia',
-  // Translated to English for Global marketplace standards
-  translationInstruction: 'Translate with high nuance accuracy. Capture idioms and cultural context, ensuring the text flows naturally like a best-selling novel.',
+  // Translated to Indonesian default
+  translationInstruction: 'Terjemahkan dengan nuansa sastra novel yang mengalir alami. Pertahankan istilah khusus jika ada di glosarium.',
   glossary: []
 };
 
@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   activeProjectId: DEFAULT_PROJECT_ID,
   projects: [DEFAULT_PROJECT],
   version: 1,
-  appLanguage: 'en', 
+  appLanguage: 'id', // Default to Indonesian
   theme: 'light',
-  translationMode: 'standard' // Default to standard
+  translationMode: 'standard' 
 };
