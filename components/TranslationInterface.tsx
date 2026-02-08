@@ -12,7 +12,7 @@ import { Clipboard } from '@capacitor/clipboard';
 import { SavedTranslation, EpubChapter } from '../types'; 
 import { translateTextStream, hasValidApiKey } from '../services/llmService';
 import { LANGUAGES, DEFAULT_SETTINGS } from '../constants';
-import { saveTranslationToDB, countTranslationsByProjectId, getPreviousChapterContext, saveProjectToDB } from '../utils/storage';
+import { saveTranslationToDB, getTranslationSummariesByProjectId, getPreviousChapterContext, saveProjectToDB } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
 import { useEditor } from '../contexts/EditorContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -110,6 +110,11 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const [isSaving, setIsSaving] = useState(false);
   const [isTranslationFullscreen, setIsTranslationFullscreen] = useState(false); 
   
+  // STATE PENTING: Untuk melacak apakah kita sedang mengedit bab yang sudah disimpan
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // TAMBAHAN: Menyimpan nama bab yang sedang diedit agar user sadar
+  const [editingName, setEditingName] = useState<string>('');
+  
   const [tempInstruction, setTempInstruction] = useState(activeProject.translationInstruction);
   const [showPromptInput, setShowPromptInput] = useState(false);
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
@@ -143,6 +148,18 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     if (!translatedText) return [];
     return translatedText.split('\n');
   }, [translatedText]);
+
+  // --- SECURITY: AUTO-RESET EDITING ID IF SOURCE IS CLEARED ---
+  useEffect(() => {
+      // Jika source text kosong (dihapus manual oleh user), 
+      // PUTUS hubungan dengan bab sebelumnya untuk mencegah overwrite yang tidak disengaja.
+      if (!sourceText || sourceText.trim() === '') {
+          if (editingId) {
+              setEditingId(null);
+              setEditingName('');
+          }
+      }
+  }, [sourceText, editingId]);
 
   // --- RESTORE SCROLL POSITION (AUTO-RESUME) ---
   useEffect(() => {
@@ -216,11 +233,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   };
 
   const handleClearSource = async () => {
-      // FIX: Langsung hapus tanpa konfirmasi yang mengganggu
       setSourceText('');
       setTranslatedText('');
       outputBufferRef.current = '';
       setActiveChapterId(null);
+      setEditingId(null); // RESET STATE EDITING
+      setEditingName('');
       localStorage.removeItem('editor_scroll_index');
       
       await deleteItem('app_state', 'editor_source_content');
@@ -234,14 +252,11 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           let text = '';
           
           if (isElectron() && window.novtlAPI) {
-              // ELECTRON NATIVE
               text = await window.novtlAPI.readClipboard();
           } else if (isCapacitorNative()) {
-              // ANDROID/iOS NATIVE
               const { value } = await Clipboard.read();
               text = value;
           } else {
-              // WEB FALLBACK
               text = await navigator.clipboard.readText();
           }
 
@@ -264,6 +279,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
   const processFile = async (file: File) => {
       const fileName = file.name.toLowerCase();
+      setEditingId(null); // Reset editing ID saat file baru dimuat
+      setEditingName('');
       
       if (fileName.endsWith('.epub')) {
         try {
@@ -345,6 +362,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           setSourceText(text);
           setTranslatedText('');
           setActiveChapterId(chapter.id);
+          
+          // SAFETY: Pastikan saat ganti bab EPUB, ID editing direset.
+          // Jadi kalau user save, dia akan buat bab baru, bukan overwrite yang lama.
+          setEditingId(null); 
+          setEditingName('');
+          
           localStorage.removeItem('editor_scroll_index'); 
           setIsEpubModalOpen(false);
           showToastNotification(`Bab dimuat: ${chapter.title}`);
@@ -357,6 +380,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setEpubChapters([]);
       setLoadedZip(null);
       setActiveChapterId(null);
+      setEditingId(null);
+      setEditingName('');
       setIsEpubModalOpen(false);
       await deleteItem('epub_files', 'active_epub_file');
       await deleteItem('app_state', 'active_epub_metadata');
@@ -377,8 +402,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     abortControllerRef.current = new AbortController();
 
     try {
-      // FETCH CONTEXT FROM SQLITE (PREVIOUS CHAPTER)
-      // Ini memastikan AI tahu konteks bab sebelumnya untuk kontinuitas cerita
       const previousChapterContext = await getPreviousChapterContext(activeProject.id);
 
       await translateTextStream(
@@ -404,28 +427,75 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     }
   };
 
+  // --- MANUAL CANCEL EDIT ---
+  const handleCancelEdit = () => {
+      setEditingId(null);
+      setEditingName('');
+      showToastNotification("Mode Edit dibatalkan. Simpan berikutnya akan menjadi Bab Baru.");
+  };
+
   const handleSaveTranslation = async () => {
     if (!translatedText.trim()) return;
     setIsSaving(true);
     
     try {
-        // FIX: Pastikan project induk ada di DB sebelum simpan chapter
-        // Ini mencegah error "FOREIGN KEY constraint failed" (Error code 19)
         await saveProjectToDB(activeProject);
 
-        const count = await countTranslationsByProjectId(activeProject.id);
+        const existingChapters = await getTranslationSummariesByProjectId(activeProject.id);
+        
+        // 2. Tentukan ID: Update yang ada atau Buat Baru?
+        let idToSave = editingId;
+        
+        // Cek validitas editingId
+        if (idToSave && !existingChapters.find(c => c.id === idToSave)) {
+            idToSave = null;
+        }
+
+        let nameToSave = "";
+        let isUpdate = false;
+
+        if (idToSave) {
+            // MODE UPDATE (Safe karena user melihat tombol UPDATE)
+            const existing = existingChapters.find(c => c.id === idToSave);
+            nameToSave = existing ? existing.name : "Unknown Chapter";
+            isUpdate = true;
+        } else {
+            // MODE BUAT BARU
+            idToSave = generateId();
+
+            if (activeChapterId) {
+                const epubTitle = epubChapters.find(c => c.id === activeChapterId)?.title;
+                nameToSave = epubTitle || `Chapter ${existingChapters.length + 1}`;
+                if (existingChapters.some(s => s.name === nameToSave)) {
+                    nameToSave = `${nameToSave} (Copy)`;
+                }
+            } else {
+                const numbers = existingChapters
+                    .map(s => {
+                        const m = s.name.match(/^Chapter (\d+)$/i);
+                        return m ? parseInt(m[1]) : 0;
+                    })
+                    .filter(n => !isNaN(n));
+                
+                const nextNum = numbers.length > 0 ? Math.max(...numbers) + 1 : existingChapters.length + 1;
+                nameToSave = `Chapter ${nextNum}`;
+            }
+        }
+
         const newTranslation: SavedTranslation = {
-          id: generateId(),
+          id: idToSave,
           projectId: activeProject.id,
-          name: activeChapterId 
-            ? (epubChapters.find(c => c.id === activeChapterId)?.title || `Chapter ${count + 1}`) 
-            : `Chapter ${count + 1}`,
+          name: nameToSave,
           translatedText: translatedText,
           timestamp: new Date().toISOString(),
         };
         
         await saveTranslationToDB(newTranslation);
-        showToastNotification(t('editor.saved')); 
+        
+        setEditingId(idToSave); 
+        setEditingName(nameToSave); // Update nama yang sedang diedit
+        
+        showToastNotification(isUpdate ? `Updated: ${nameToSave}` : `Saved: ${nameToSave}`);
     } catch (e: any) {
         console.error("Save failed:", e);
         setError(`Gagal menyimpan: ${e.message}`);
@@ -436,7 +506,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
   const ReadingModeModal = () => {
     const readingVirtuosoRef = useRef<VirtuosoHandle>(null);
-    
     useEffect(() => {
         const savedPos = localStorage.getItem('editor_scroll_index');
         if (savedPos && readingVirtuosoRef.current) {
@@ -577,7 +646,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {/* PASTE BUTTON - FIX: Z-Index lowered to z-30 to sit below Navbar (z-50) */}
+            {/* PASTE BUTTON */}
             {!sourceText && !isDragging && !isRestoring && (
                 <button 
                     onClick={handlePasteSource} 
@@ -603,7 +672,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 disabled={isRestoring}
             />
 
-            {/* EMPTY STATE - BUTTON REMOVED AS REQUESTED */}
+            {/* EMPTY STATE */}
             {!sourceText && !isRestoring && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
                     <span className="text-5xl mb-4 grayscale opacity-50">📝</span>
@@ -625,8 +694,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           </div>
 
           {sourceText && (
-             // FIX: Z-Index lowered to z-30
-             <button onClick={handleClearSource} className="absolute -top-3 right-4 z-30 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm">✕</button>
+             <button onClick={handleClearSource} className="absolute -top-3 right-4 z-30 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm" title="Hapus & Buat Baru">✕</button>
           )}
         </div>
 
@@ -660,7 +728,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                   <span className="text-lg">{isLoading ? t('editor.waiting') : t('editor.emptyState')}</span>
                 </div>
               )}
-              {/* Loading Indicator Overlay if generating but virtuoso is handling scroll */}
+              {/* Loading Indicator */}
               {isLoading && translatedText && (
                   <div className="absolute bottom-4 right-4 z-20">
                       <div className="bg-accent text-white text-xs px-3 py-1 rounded-full animate-pulse shadow-md">
@@ -671,7 +739,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             </div>
 
             {translatedText && (
-                // FIX: Z-Index lowered to z-30
                 <button onClick={() => setIsTranslationFullscreen(true)} className="absolute -top-3 right-4 z-30 p-2 bg-indigo-50 border border-indigo-100 text-accent rounded-full hover:bg-accent hover:text-white transition-all shadow-sm">🔍</button>
             )}
         </div>
@@ -686,20 +753,35 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 <button disabled={!isLoading && !sourceText.trim()} onClick={handleTranslate} className={`flex-grow py-3.5 md:py-4 font-serif font-bold tracking-widest text-sm rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex justify-center items-center gap-2 ${isLoading ? 'bg-red-500 text-white' : 'bg-charcoal text-paper'}`}>
                     {isLoading ? t('editor.stop') : t('editor.translate')}
                 </button>
-                <button 
-                  disabled={isLoading || isSaving || !translatedText.trim()} 
-                  onClick={handleSaveTranslation} 
-                  className="px-6 md:px-8 py-3.5 md:py-4 bg-paper text-charcoal font-bold text-sm rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50 shadow-soft border border-border flex items-center gap-2"
-                >
-                    {isSaving ? (
-                      <>
-                        <div className="w-3 h-3 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
-                        <span>{t('editor.saving')}</span>
-                      </>
-                    ) : (
-                      <span>{t('editor.save')}</span>
+                <div className="flex items-center gap-1">
+                    {/* BUTTON BATAL EDIT MANUAL */}
+                    {editingId && (
+                        <button 
+                            onClick={handleCancelEdit} 
+                            className="bg-red-100 text-red-500 hover:bg-red-500 hover:text-white px-3 md:px-4 py-3.5 md:py-4 rounded-xl font-bold transition-all flex items-center justify-center shadow-soft h-full"
+                            title="Batal Edit (Buat Baru)"
+                        >
+                            ✕
+                        </button>
                     )}
-                </button>
+                    <button 
+                      disabled={isLoading || isSaving || !translatedText.trim()} 
+                      onClick={handleSaveTranslation} 
+                      className={`px-6 md:px-8 py-3.5 md:py-4 font-bold text-sm rounded-xl transition-all disabled:opacity-50 shadow-soft border border-border flex items-center gap-2 ${editingId ? 'bg-accent text-white hover:bg-accentHover' : 'bg-paper text-charcoal hover:bg-gray-200'}`}
+                    >
+                        {isSaving ? (
+                          <>
+                            <div className="w-3 h-3 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
+                            <span>{t('editor.saving')}</span>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-start leading-none">
+                             <span>{editingId ? 'UPDATE' : t('editor.save')}</span>
+                             {editingId && editingName && <span className="text-[9px] opacity-80 max-w-[100px] truncate">{editingName}</span>}
+                          </div>
+                        )}
+                    </button>
+                </div>
             </div>
          </div>
       </div>
