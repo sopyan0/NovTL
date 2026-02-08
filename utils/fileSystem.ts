@@ -112,9 +112,8 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
         } 
         else if (isCapacitorNative()) {
             try {
-                // TRIK: Gunakan Directory.ExternalStorage tapi arahkan ke path "Download/filename"
-                // Ini memungkinkan penulisan ke folder Download publik tanpa permission khusus di Android 11+
-                const exportPath = `Download/${filename}`; 
+                // TRIK: Gunakan Directory.ExternalStorage tapi arahkan ke path "Download/NovTL/filename"
+                const exportPath = `Download/NovTL/${filename}`; 
                 
                 await Filesystem.writeFile({
                     path: exportPath,
@@ -123,7 +122,7 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                     recursive: true
                 });
 
-                alert(`✅ BERHASIL!\n\n📂 File disimpan di folder Download utama:\n${filename}`);
+                alert(`✅ BERHASIL!\n\n📂 File disimpan di folder:\nDownload/NovTL/${filename}`);
 
             } catch (e: any) {
                 console.error("Download Error (Primary)", e);
@@ -131,12 +130,12 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 // FALLBACK: Kalau ExternalStorage tetap ditolak, coba ke Documents/NovTL
                 try {
                     await Filesystem.writeFile({
-                        path: `NovTL_Export/${filename}`,
+                        path: `NovTL/${filename}`,
                         data: base64data,
                         directory: Directory.Documents, 
                         recursive: true
                     });
-                    alert(`⚠️ Folder Download terkunci sistem.\nFile disimpan di: Internal/Documents/NovTL_Export/${filename}`);
+                    alert(`⚠️ Folder Download terkunci sistem.\nFile disimpan di: Internal/Documents/NovTL/${filename}`);
                 } catch (err2: any) {
                     alert(`❌ Gagal menyimpan file: ${err2.message}`);
                 }

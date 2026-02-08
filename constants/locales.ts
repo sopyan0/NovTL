@@ -99,7 +99,7 @@ export const TRANSLATIONS = {
         step1: "Physical Files: All data is saved in your 'Documents/NovTL' folder. You can backup this folder manually.",
         step2: "Hybrid Cache: We use a local database (IndexedDB) to make opening thousands of chapters feel instant.",
         step3: "Maintenance: If the app feels slow, use 'Clear Cache' in Settings. Your physical files are ALWAYS safe.",
-        step4: "Export: EPUB/TXT files on Android will appear in 'Download/NovTL_Export'."
+        step4: "Export: EPUB/TXT files on Android will appear in 'Download/NovTL'."
       },
       faq: {
         q1: "Is this free?",
@@ -210,7 +210,7 @@ export const TRANSLATIONS = {
         step1: "File Fisik: Semua data disimpan di folder 'Documents/NovTL' di komputer/HP Anda.",
         step2: "Hybrid Cache: Kami menggunakan database lokal (IndexedDB) agar ribuan bab terbuka secara instan.",
         step3: "Optimasi: Jika aplikasi terasa berat, gunakan 'Bersihkan Cache' di Setelan. File asli tetap AMAN.",
-        step4: "Ekspor: Hasil EPUB/TXT di Android akan muncul di folder 'Download/NovTL_Export'."
+        step4: "Ekspor: Hasil EPUB/TXT di Android akan muncul di folder 'Download/NovTL'."
       },
       faq: {
         q1: "Apakah ini gratis?",

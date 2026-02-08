@@ -118,7 +118,7 @@ ipcMain.handle('clipboard-read', () => clipboard.readText());
 ipcMain.handle('save-to-downloads', async (event, { filename, base64Data }) => {
     try {
         const downloadFolder = app.getPath('downloads');
-        const exportFolder = path.join(downloadFolder, 'NovTL_Exports');
+        const exportFolder = path.join(downloadFolder, 'NovTL');
         
         if (!fs.existsSync(exportFolder)) {
             fs.mkdirSync(exportFolder, { recursive: true });

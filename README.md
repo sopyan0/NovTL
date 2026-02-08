@@ -13,7 +13,7 @@ NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk men
 ### Di Android
 1. Install file `.apk` yang disediakan.
 2. Berikan izin akses penyimpanan saat diminta.
-3. Hasil ekspor (EPUB/TXT) akan muncul di folder **Penyimpanan Internal > Download > NovTL_Export**.
+3. Hasil ekspor (EPUB/TXT) akan muncul di folder **Penyimpanan Internal > Download > NovTL**.
 
 ---
 
@@ -41,7 +41,7 @@ Aplikasi ini membutuhkan "Kunci API" untuk bekerja. Kami merekomendasikan **Goog
 Data Anda **TIDAK** disimpan di server kami. Semua file ada di perangkat Anda:
 - **Windows**: `Documents/NovTL`
 - **Android (Aplikasi)**: `Documents/NovTL` (Biasanya tersembunyi di internal folder Android)
-- **Android (Hasil Ekspor)**: `Download/NovTL_Export` (Gunakan File Manager untuk mencari folder Download utama)
+- **Android (Hasil Ekspor)**: `Download/NovTL` (Gunakan File Manager untuk mencari folder Download utama)
 
 ---
 *Dibuat dengan ❤️ untuk para penikmat novel.*
