@@ -12,7 +12,7 @@ import { Clipboard } from '@capacitor/clipboard';
 import { SavedTranslation, EpubChapter } from '../types'; 
 import { translateTextStream, hasValidApiKey } from '../services/llmService';
 import { LANGUAGES, DEFAULT_SETTINGS } from '../constants';
-import { saveTranslationToDB, countTranslationsByProjectId, getPreviousChapterContext } from '../utils/storage';
+import { saveTranslationToDB, countTranslationsByProjectId, getPreviousChapterContext, saveProjectToDB } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
 import { useEditor } from '../contexts/EditorContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -409,6 +409,10 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     setIsSaving(true);
     
     try {
+        // FIX: Pastikan project induk ada di DB sebelum simpan chapter
+        // Ini mencegah error "FOREIGN KEY constraint failed" (Error code 19)
+        await saveProjectToDB(activeProject);
+
         const count = await countTranslationsByProjectId(activeProject.id);
         const newTranslation: SavedTranslation = {
           id: generateId(),
@@ -421,7 +425,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
         };
         
         await saveTranslationToDB(newTranslation);
-        showToastNotification(t('editor.saved')); // Tampilkan pesan sukses "TERSIMPAN!"
+        showToastNotification(t('editor.saved')); 
     } catch (e: any) {
         console.error("Save failed:", e);
         setError(`Gagal menyimpan: ${e.message}`);
