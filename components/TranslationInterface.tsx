@@ -4,7 +4,7 @@
  * Copyright (c) 2025 NovTL Studio. All Rights Reserved.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'; 
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; 
 import ReactDOM from 'react-dom';
 import JSZip from 'jszip';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'; 
@@ -56,9 +56,8 @@ const TranslationToolbar: React.FC<{
   activeProvider: string;
   mode: 'standard' | 'high_quality';
   onModeChange: (m: 'standard' | 'high_quality') => void;
-  saveStatus: 'saved' | 'saving' | 'unsaved';
   t: (key: string) => string;
-}> = ({ sourceLang, targetLang, onSourceChange, onTargetChange, onSwap, hasApiKey, onToggleApi, onTogglePrompt, onLoadEpub, showPrompt, showApi, activeProvider, mode, onModeChange, saveStatus, t }) => (
+}> = ({ sourceLang, targetLang, onSourceChange, onTargetChange, onSwap, hasApiKey, onToggleApi, onTogglePrompt, onLoadEpub, showPrompt, showApi, activeProvider, mode, onModeChange, t }) => (
   <div className="glass-card p-2 md:p-3 rounded-3xl z-30 flex flex-col md:flex-row gap-3 items-center justify-between transition-all duration-300 shadow-sm hover:shadow-md">
     <div className="flex items-center gap-2 bg-paper/50 dark:bg-black/20 p-1.5 rounded-2xl border border-border/40 shadow-inner-light w-full md:w-auto overflow-x-auto">
         <select value={sourceLang} onChange={(e) => onSourceChange(e.target.value)} className="w-full md:w-32 appearance-none bg-transparent hover:bg-card pl-3 pr-6 py-2 rounded-xl text-sm font-semibold text-charcoal outline-none cursor-pointer transition-colors focus:bg-card">
@@ -101,7 +100,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     translatedText, setTranslatedText,
     epubChapters, setEpubChapters,
     activeChapterId, setActiveChapterId,
-    isRestoring, saveStatus
+    isRestoring
   } = useEditor();
   const { t } = useLanguage();
 
@@ -109,11 +108,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTranslationFullscreen, setIsTranslationFullscreen] = useState(false); 
-  
-  // STATE PENTING: Untuk melacak apakah kita sedang mengedit bab yang sudah disimpan
-  const [editingId, setEditingId] = useState<string | null>(null);
-  // TAMBAHAN: Menyimpan nama bab yang sedang diedit agar user sadar
-  const [editingName, setEditingName] = useState<string>('');
   
   const [tempInstruction, setTempInstruction] = useState(activeProject.translationInstruction);
   const [showPromptInput, setShowPromptInput] = useState(false);
@@ -123,9 +117,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const [isEpubModalOpen, setIsEpubModalOpen] = useState(false);
   const [loadedZip, setLoadedZip] = useState<JSZip | null>(null);
   
-  // Drag and Drop State
   const [isDragging, setIsDragging] = useState(false);
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [toastMessage, setToastMessage] = useState('');
@@ -136,32 +128,18 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const lastUpdateRef = useRef(0);
   const portalRoot = document.getElementById('portal-root');
   
-  // Virtuoso Refs
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   
   const hasApiKey = hasValidApiKey(settings);
   const glossaryCount = activeProject.glossary.length;
   const activeModel = settings.activeProvider;
 
-  // Memoize paragraphs for Virtuoso
   const translatedParagraphs = useMemo(() => {
     if (!translatedText) return [];
     return translatedText.split('\n');
   }, [translatedText]);
 
-  // --- SECURITY: AUTO-RESET EDITING ID IF SOURCE IS CLEARED ---
-  useEffect(() => {
-      // Jika source text kosong (dihapus manual oleh user), 
-      // PUTUS hubungan dengan bab sebelumnya untuk mencegah overwrite yang tidak disengaja.
-      if (!sourceText || sourceText.trim() === '') {
-          if (editingId) {
-              setEditingId(null);
-              setEditingName('');
-          }
-      }
-  }, [sourceText, editingId]);
-
-  // --- RESTORE SCROLL POSITION (AUTO-RESUME) ---
+  // RESTORE SCROLL POSITION
   useEffect(() => {
     if (translatedText && !isLoading && virtuosoRef.current) {
         const savedPos = localStorage.getItem('editor_scroll_index');
@@ -180,7 +158,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       localStorage.setItem('editor_scroll_index', index.toString());
   };
 
-  // --- PERSISTENCE LOGIC: EPUB RECOVERY ---
+  // PERSISTENCE LOGIC: EPUB RECOVERY
   useEffect(() => {
     const recoverEpub = async () => {
         const savedEpub = await getItem('epub_files', 'active_epub_file');
@@ -237,8 +215,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setTranslatedText('');
       outputBufferRef.current = '';
       setActiveChapterId(null);
-      setEditingId(null); // RESET STATE EDITING
-      setEditingName('');
       localStorage.removeItem('editor_scroll_index');
       
       await deleteItem('app_state', 'editor_source_content');
@@ -250,7 +226,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const handlePasteSource = async () => {
       try {
           let text = '';
-          
           if (isElectron() && window.novtlAPI) {
               text = await window.novtlAPI.readClipboard();
           } else if (isCapacitorNative()) {
@@ -279,8 +254,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
   const processFile = async (file: File) => {
       const fileName = file.name.toLowerCase();
-      setEditingId(null); // Reset editing ID saat file baru dimuat
-      setEditingName('');
       
       if (fileName.endsWith('.epub')) {
         try {
@@ -314,7 +287,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       }
   };
 
-  // --- DRAG & DROP HANDLERS ---
   const handleDragOver = useCallback((e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -362,12 +334,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           setSourceText(text);
           setTranslatedText('');
           setActiveChapterId(chapter.id);
-          
-          // SAFETY: Pastikan saat ganti bab EPUB, ID editing direset.
-          // Jadi kalau user save, dia akan buat bab baru, bukan overwrite yang lama.
-          setEditingId(null); 
-          setEditingName('');
-          
           localStorage.removeItem('editor_scroll_index'); 
           setIsEpubModalOpen(false);
           showToastNotification(`${t('editor.epubLoaded')}: ${chapter.title}`);
@@ -380,8 +346,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setEpubChapters([]);
       setLoadedZip(null);
       setActiveChapterId(null);
-      setEditingId(null);
-      setEditingName('');
       setIsEpubModalOpen(false);
       await deleteItem('epub_files', 'active_epub_file');
       await deleteItem('app_state', 'active_epub_metadata');
@@ -427,63 +391,57 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     }
   };
 
-  // --- MANUAL CANCEL EDIT ---
-  const handleCancelEdit = () => {
-      setEditingId(null);
-      setEditingName('');
-      showToastNotification(t('editor.cancelEdit'));
-  };
-
+  /**
+   * --- SMART AUTO-INCREMENT SAVE (PERBAIKAN TOTAL) ---
+   * 1. Hapus total pengecekan ID lama. Selalu pakai generateId().
+   * 2. Cari angka bab tertinggi dari nama di library.
+   * 3. Jika ketemu "Chapter 1", maka bab baru otomatis "Chapter 2".
+   */
   const handleSaveTranslation = async () => {
     if (!translatedText.trim()) return;
     setIsSaving(true);
     
     try {
+        // Simpan metadata proyek dulu
         await saveProjectToDB(activeProject);
-
-        const existingChapters = await getTranslationSummariesByProjectId(activeProject.id);
         
-        // 2. Tentukan ID: Update yang ada atau Buat Baru?
-        let idToSave = editingId;
+        // Ambil daftar bab yang sudah ada di library proyek ini
+        const summaries = await getTranslationSummariesByProjectId(activeProject.id);
         
-        // Cek validitas editingId
-        if (idToSave && !existingChapters.find(c => c.id === idToSave)) {
-            idToSave = null;
-        }
-
         let nameToSave = "";
-        let isUpdate = false;
-
-        if (idToSave) {
-            // MODE UPDATE (Safe karena user melihat tombol UPDATE)
-            const existing = existingChapters.find(c => c.id === idToSave);
-            nameToSave = existing ? existing.name : "Unknown Chapter";
-            isUpdate = true;
-        } else {
-            // MODE BUAT BARU
-            idToSave = generateId();
-
-            if (activeChapterId) {
-                const epubTitle = epubChapters.find(c => c.id === activeChapterId)?.title;
-                nameToSave = epubTitle || `Chapter ${existingChapters.length + 1}`;
-                if (existingChapters.some(s => s.name === nameToSave)) {
-                    nameToSave = `${nameToSave} (Copy)`;
-                }
-            } else {
-                const numbers = existingChapters
-                    .map(s => {
-                        const m = s.name.match(/^Chapter (\d+)$/i);
-                        return m ? parseInt(m[1]) : 0;
-                    })
-                    .filter(n => !isNaN(n));
-                
-                const nextNum = numbers.length > 0 ? Math.max(...numbers) + 1 : existingChapters.length + 1;
+        
+        // Cari angka tertinggi dari nama-nama yang berformat "Chapter {angka}"
+        const chapterNumbers = summaries
+            .map(s => {
+                const match = s.name.match(/Chapter\s+(\d+)/i);
+                return match ? parseInt(match[1], 10) : 0;
+            })
+            .filter(n => n > 0);
+        
+        // Tentukan nomor berikutnya
+        const nextNum = chapterNumbers.length > 0 ? Math.max(...chapterNumbers) + 1 : 1;
+        
+        // 1. Jika sumber dari EPUB dan baru pertama kali simpan bab ini
+        if (activeChapterId) {
+            const epubTitle = epubChapters.find(c => c.id === activeChapterId)?.title;
+            nameToSave = epubTitle || `Chapter ${nextNum}`;
+            
+            // Cek apakah judul ini sudah ada di Library (duplikat nama)
+            if (summaries.some(s => s.name === nameToSave)) {
                 nameToSave = `Chapter ${nextNum}`;
             }
+        } 
+        // 2. Jika ketik manual atau EPUB yang sudah pernah disimpan
+        else {
+            nameToSave = `Chapter ${nextNum}`;
         }
 
+        // CRITICAL FIX: SELALU PAKAI ID BARU.
+        // Inilah yang menjamin bab baru dibuat, bukan mengupdate yang lama.
+        const freshId = generateId(); 
+        
         const newTranslation: SavedTranslation = {
-          id: idToSave,
+          id: freshId,
           projectId: activeProject.id,
           name: nameToSave,
           translatedText: translatedText,
@@ -492,10 +450,10 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
         
         await saveTranslationToDB(newTranslation);
         
-        setEditingId(idToSave); 
-        setEditingName(nameToSave); // Update nama yang sedang diedit
-        
-        showToastNotification(isUpdate ? `Updated: ${nameToSave}` : `Saved: ${nameToSave}`);
+        // Kosongkan activeChapterId agar simpan berikutnya tidak pakai judul EPUB yang sama
+        setActiveChapterId(null); 
+
+        showToastNotification(`Saved as: ${nameToSave}`);
     } catch (e: any) {
         console.error("Save failed:", e);
         setError(`Gagal menyimpan: ${e.message}`);
@@ -563,7 +521,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                             <span className={`text-xs font-bold px-2 py-1 rounded-md min-w-[2rem] text-center ${isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>{idx + 1}</span>
                             <div className="flex-grow min-w-0">
                                 <span className={`font-serif text-sm truncate block ${isActive ? 'text-white font-bold' : 'text-charcoal'}`}>{chapter.title}</span>
-                                {isActive && <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block mt-1">Sedang Diterjemahkan</span>}
+                                {isActive && <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block mt-1">Loaded</span>}
                             </div>
                         </button>
                     );
@@ -580,7 +538,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       {isTranslationFullscreen && portalRoot && ReactDOM.createPortal(<ReadingModeModal />, portalRoot)}
       {isEpubModalOpen && <EpubChapterModal />}
       
-      {/* Hidden File Input for Button Click */}
       <input type="file" ref={fileInputRef} onChange={handleFileInputChange} accept=".epub,.txt" className="hidden" />
 
       <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center gap-3 px-1">
@@ -601,7 +558,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
         onToggleApi={() => setShowApiKeyInput(!showApiKeyInput)} onTogglePrompt={() => setShowPromptInput(!showPromptInput)}
         onLoadEpub={triggerEpubUpload} activeProvider={settings.activeProvider}
         mode={settings.translationMode || 'standard'} onModeChange={(m) => updateSettings({ translationMode: m })} 
-        saveStatus={saveStatus}
         t={t}
       />
 
@@ -629,13 +585,11 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-8">
-        {/* SOURCE TEXT AREA WITH DRAG & DROP */}
         <div className="flex flex-col h-full relative group">
           <div className="absolute -top-3 left-6 z-10 pointer-events-none flex items-center gap-2">
                <span className="text-[10px] font-bold text-subtle bg-paper px-3 py-1 uppercase tracking-widest border border-border rounded-md shadow-sm">{t('editor.source')}</span>
           </div>
           
-          {/* DRAG & DROP CONTAINER */}
           <div 
             className={`relative w-full h-[400px] md:h-[500px] lg:h-[600px] rounded-[2rem] transition-all duration-300 overflow-hidden ${
                 isDragging 
@@ -646,7 +600,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            {/* PASTE BUTTON */}
             {!sourceText && !isDragging && !isRestoring && (
                 <button 
                     onClick={handlePasteSource} 
@@ -656,14 +609,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 </button>
             )}
 
-            {/* DRAG OVERLAY */}
             <div className={`absolute inset-0 z-40 flex flex-col items-center justify-center bg-paper/90 backdrop-blur-sm transition-opacity duration-300 pointer-events-none ${isDragging ? 'opacity-100' : 'opacity-0'}`}>
                  <span className="text-5xl mb-4 animate-bounce">📂</span>
                  <p className="text-accent font-bold text-lg">{t('editor.dragDrop')}</p>
                  <p className="text-subtle text-xs">{t('editor.dragDropDesc')}</p>
             </div>
 
-            {/* TEXTAREA (Z-INDEX 20) */}
             <textarea 
                 className="w-full h-full p-4 md:p-6 bg-transparent outline-none resize-none text-base md:text-lg font-serif leading-loose text-charcoal custom-scrollbar relative z-20 placeholder-gray-400/50" 
                 placeholder={isDragging ? "" : (isRestoring ? t('editor.restoring') : t('editor.placeholder'))}
@@ -672,7 +623,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 disabled={isRestoring}
             />
 
-            {/* EMPTY STATE */}
             {!sourceText && !isRestoring && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
                     <span className="text-5xl mb-4 grayscale opacity-50">📝</span>
@@ -694,11 +644,10 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           </div>
 
           {sourceText && (
-             <button onClick={handleClearSource} className="absolute -top-3 right-4 z-30 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm" title="Hapus & Buat Baru">✕</button>
+             <button onClick={handleClearSource} className="absolute -top-3 right-4 z-30 p-2 bg-red-100 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm" title="Clear All Content">✕</button>
           )}
         </div>
 
-        {/* TRANSLATION OUTPUT AREA */}
         <div className="flex flex-col h-full relative group">
             <div className="absolute -top-3 left-6 z-10 pointer-events-none">
                <span className="text-[10px] font-bold text-accent bg-paper px-3 py-1 uppercase tracking-widest border border-border rounded-md shadow-sm">{t('editor.translation')}</span>
@@ -708,7 +657,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 className="w-full h-[400px] md:h-[500px] lg:h-[600px] rounded-[2rem] border-2 border-transparent bg-card shadow-soft overflow-hidden relative transition-all"
             >
               {translatedText ? (
-                // VIRTUOSO IMPLEMENTATION FOR PERFORMANCE
                 <Virtuoso 
                     ref={virtuosoRef}
                     data={translatedParagraphs}
@@ -720,7 +668,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                         </p>
                     )}
                     rangeChanged={({ startIndex }) => handleScroll(startIndex)}
-                    increaseViewportBy={500} // Pre-render buffer
+                    increaseViewportBy={500} 
                 />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-300 font-serif italic text-center p-4">
@@ -728,7 +676,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                   <span className="text-lg">{isLoading ? t('editor.waiting') : t('editor.emptyState')}</span>
                 </div>
               )}
-              {/* Loading Indicator */}
               {isLoading && translatedText && (
                   <div className="absolute bottom-4 right-4 z-20">
                       <div className="bg-accent text-white text-xs px-3 py-1 rounded-full animate-pulse shadow-md">
@@ -753,35 +700,20 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 <button disabled={!isLoading && !sourceText.trim()} onClick={handleTranslate} className={`flex-grow py-3.5 md:py-4 font-serif font-bold tracking-widest text-sm rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex justify-center items-center gap-2 ${isLoading ? 'bg-red-500 text-white' : 'bg-charcoal text-paper'}`}>
                     {isLoading ? t('editor.stop') : t('editor.translate')}
                 </button>
-                <div className="flex items-center gap-1">
-                    {/* BUTTON BATAL EDIT MANUAL */}
-                    {editingId && (
-                        <button 
-                            onClick={handleCancelEdit} 
-                            className="bg-red-100 text-red-500 hover:bg-red-500 hover:text-white px-3 md:px-4 py-3.5 md:py-4 rounded-xl font-bold transition-all flex items-center justify-center shadow-soft h-full"
-                            title="Batal Edit (Buat Baru)"
-                        >
-                            ✕
-                        </button>
+                <button 
+                  disabled={isLoading || isSaving || !translatedText.trim()} 
+                  onClick={handleSaveTranslation} 
+                  className={`px-6 md:px-12 py-3.5 md:py-4 font-bold text-sm rounded-xl transition-all disabled:opacity-50 shadow-soft border border-border flex items-center gap-2 bg-paper text-charcoal hover:bg-gray-200 active:scale-95`}
+                >
+                    {isSaving ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
+                        <span>{t('editor.saving')}</span>
+                      </>
+                    ) : (
+                      <span>{t('editor.save')}</span>
                     )}
-                    <button 
-                      disabled={isLoading || isSaving || !translatedText.trim()} 
-                      onClick={handleSaveTranslation} 
-                      className={`px-6 md:px-8 py-3.5 md:py-4 font-bold text-sm rounded-xl transition-all disabled:opacity-50 shadow-soft border border-border flex items-center gap-2 ${editingId ? 'bg-accent text-white hover:bg-accentHover' : 'bg-paper text-charcoal hover:bg-gray-200'}`}
-                    >
-                        {isSaving ? (
-                          <>
-                            <div className="w-3 h-3 border-2 border-charcoal border-t-transparent rounded-full animate-spin"></div>
-                            <span>{t('editor.saving')}</span>
-                          </>
-                        ) : (
-                          <div className="flex flex-col items-start leading-none">
-                             <span>{editingId ? 'UPDATE' : t('editor.save')}</span>
-                             {editingId && editingName && <span className="text-[9px] opacity-80 max-w-[100px] truncate">{editingName}</span>}
-                          </div>
-                        )}
-                    </button>
-                </div>
+                </button>
             </div>
          </div>
       </div>

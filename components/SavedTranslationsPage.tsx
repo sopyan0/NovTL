@@ -30,6 +30,7 @@ export default function SavedTranslationsPage() {
   const [editingName, setEditingName] = useState<string>('');
   
   const [searchTerm, setSearchTerm] = useState('');
+  // DEFAULT SORT: Oldest (Natural Order) agar Chapter 1, 2, 3 urut dari awal.
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'a-z' | 'z-a'>('oldest'); 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -77,11 +78,18 @@ export default function SavedTranslationsPage() {
         data = data.filter(item => item.name.toLowerCase().includes(lower));
     }
 
+    // NATURAL NUMERIC SORTING (1, 2, 10 instead of 1, 10, 2)
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
     data.sort((a, b) => {
         if (sortOrder === 'newest') return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        if (sortOrder === 'oldest') return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-        if (sortOrder === 'a-z') return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-        if (sortOrder === 'z-a') return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' });
+        // Logika Oldest: Urutkan berdasarkan angka bab atau waktu terlama
+        if (sortOrder === 'oldest') {
+            const res = collator.compare(a.name, b.name);
+            return res !== 0 ? res : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+        }
+        if (sortOrder === 'a-z') return collator.compare(a.name, b.name);
+        if (sortOrder === 'z-a') return collator.compare(b.name, a.name);
         return 0;
     });
 
@@ -136,9 +144,9 @@ export default function SavedTranslationsPage() {
 
       if (itemsToProcess.length === 0) return [];
 
-      itemsToProcess.sort((a, b) => 
-          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-      );
+      // Always sort naturally for output to ensure Ch 1, 2, 10 order
+      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+      itemsToProcess.sort((a, b) => collator.compare(a.name, b.name));
 
       const ids = itemsToProcess.map(s => s.id);
       return await getTranslationsByIds(ids);
