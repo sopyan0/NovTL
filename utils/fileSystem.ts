@@ -1,7 +1,6 @@
 
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem, Encoding } from '@capacitor/filesystem';
-import { putItem, getItem, deleteItem } from './idb';
 
 declare global {
     interface Window {
@@ -29,9 +28,6 @@ export const isCapacitorNative = () => Capacitor.isNativePlatform();
 export const fsWrite = async (filename: string, content: string | object): Promise<void> => {
     const stringData = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
     
-    // Cache ke IDB (untuk performa baca cepat)
-    await putItem('fs_cache', { id: filename, content: stringData });
-
     if (isElectron()) {
         const res = await window.novtlAPI!.write(filename, stringData);
         if (!res.success) throw new Error(res.error || "Failed to write to disk");
@@ -54,23 +50,18 @@ export const fsWrite = async (filename: string, content: string | object): Promi
 
 export const fsRead = async <T>(filename: string): Promise<T | null> => {
     let raw: string | null = null;
-    const cached = await getItem('fs_cache', filename);
-    if (cached) {
-        raw = cached.content;
-    } else {
-        if (isElectron()) {
-            raw = await window.novtlAPI!.read(filename);
-        } else if (isCapacitorNative()) {
-            try {
-                const result = await Filesystem.readFile({
-                    path: `NovTL/${filename}`,
-                    directory: Directory.Documents,
-                    encoding: Encoding.UTF8
-                });
-                raw = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
-            } catch (e) { return null; }
-        }
-        if (raw) await putItem('fs_cache', { id: filename, content: raw });
+    
+    if (isElectron()) {
+        raw = await window.novtlAPI!.read(filename);
+    } else if (isCapacitorNative()) {
+        try {
+            const result = await Filesystem.readFile({
+                path: `NovTL/${filename}`,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8
+            });
+            raw = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+        } catch (e) { return null; }
     }
 
     if (!raw) return null;
@@ -78,7 +69,6 @@ export const fsRead = async <T>(filename: string): Promise<T | null> => {
 };
 
 export const fsDelete = async (filename: string): Promise<void> => {
-    await deleteItem('fs_cache', filename);
     if (isElectron()) {
         await window.novtlAPI!.delete(filename);
     } else if (isCapacitorNative()) {

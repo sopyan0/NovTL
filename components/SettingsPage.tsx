@@ -5,7 +5,7 @@ import { LLM_PROVIDERS, PROVIDER_MODELS, DEFAULT_MODELS } from '../constants';
 import ConfirmDialog from './ConfirmDialog'; 
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { clearCacheOnly } from '../utils/idb';
+import { dbService } from '../services/DatabaseService';
 import { getTranslationsByProjectId, saveTranslationToDB, saveGlossaryToDB } from '../utils/storage';
 import { triggerDownload } from '../utils/fileSystem';
 
@@ -127,7 +127,7 @@ const SettingsPage: React.FC = () => {
   const handleClearCache = async () => {
       if(confirm(t('settings.storage.resetCacheDesc'))) {
           setIsCleaningCache(true);
-          await clearCacheOnly();
+          await dbService.wipeAllData();
           setIsCleaningCache(false);
           // Force reload to rebuild state
           window.location.reload();

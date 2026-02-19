@@ -53,20 +53,15 @@ export const wipeAllLocalData = async () => {
         // 1. Pastikan DB siap (opsional, untuk memastikan instance sqlite ada)
         try { await ensureDbReady(); } catch(e) {}
         
-        // 2. Hapus database (Native & Web)
+        // 2. Hapus database (Native/Electron)
         await dbService.wipeAllData();
         
-        // 3. Hapus cache file system (IDB)
-        // Note: fs_cache dibuat manual di utils/idb.ts, kita hapus manual juga
-        const req = indexedDB.deleteDatabase('NovTL_Hybrid_Cache'); // Nama DB dari idb.ts
-        req.onsuccess = () => console.log("IDB Cache wiped");
-        
-        // 4. Hapus LocalStorage
+        // 3. Hapus LocalStorage
         localStorage.clear();
         
         console.log("System wipe complete. Reloading...");
         
-        // 5. Reload aplikasi untuk reset state total
+        // 4. Reload aplikasi untuk reset state total
         window.location.reload();
     } catch (err) {
         console.error("Failed to wipe data cleanly:", err);

@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from 'react';
 import { EditorContextType, EpubChapter } from '../types';
-import { putItem, getItem, deleteItem } from '../utils/idb';
+import { dbService } from '../services/DatabaseService';
 
 interface ExtendedEditorContextType extends EditorContextType {
   epubChapters: EpubChapter[];
@@ -35,15 +35,15 @@ export const EditorProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const sourceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const targetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 1. LOAD DATA DARI INDEXED DB SAAT STARTUP (Gantikan LocalStorage)
+  // 1. LOAD DATA DARI SQLITE SAAT STARTUP
   useEffect(() => {
     const restoreSession = async () => {
       setIsRestoring(true);
       try {
         const [savedSource, savedTarget, savedMetadata] = await Promise.all([
-          getItem('app_state', 'editor_source_content'),
-          getItem('app_state', 'editor_target_content'),
-          getItem('app_state', 'active_epub_metadata')
+          dbService.getAppState('editor_source_content'),
+          dbService.getAppState('editor_target_content'),
+          dbService.getAppState('active_epub_metadata')
         ]);
 
         if (savedSource) setSourceText(savedSource.content || '');
@@ -62,7 +62,7 @@ export const EditorProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     restoreSession();
   }, []);
 
-  // 2. AUTO-SAVE SOURCE TEXT KE INDEXED DB (Debounced 1s)
+  // 2. AUTO-SAVE SOURCE TEXT KE SQLITE (Debounced 1s)
   useEffect(() => {
     if (isRestoring) return; // Jangan save saat sedang loading awal
 
@@ -71,7 +71,7 @@ export const EditorProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     sourceTimeoutRef.current = setTimeout(async () => {
       try {
-        await putItem('app_state', { id: 'editor_source_content', content: sourceText });
+        await dbService.saveAppState('editor_source_content', { id: 'editor_source_content', content: sourceText });
         setSaveStatus('saved');
       } catch (e) {
         console.error("Gagal menyimpan source text:", e);
@@ -84,7 +84,7 @@ export const EditorProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [sourceText, isRestoring]);
 
-  // 3. AUTO-SAVE TRANSLATED TEXT KE INDEXED DB (Debounced 1s)
+  // 3. AUTO-SAVE TRANSLATED TEXT KE SQLITE (Debounced 1s)
   useEffect(() => {
     if (isRestoring) return;
 
@@ -93,7 +93,7 @@ export const EditorProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     targetTimeoutRef.current = setTimeout(async () => {
       try {
-        await putItem('app_state', { id: 'editor_target_content', content: translatedText });
+        await dbService.saveAppState('editor_target_content', { id: 'editor_target_content', content: translatedText });
         setSaveStatus('saved');
       } catch (e) {
         console.error("Gagal menyimpan translated text:", e);
@@ -109,7 +109,7 @@ export const EditorProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // 4. Save metadata EPUB (Langsung, karena jarang berubah)
   useEffect(() => {
     if (epubChapters.length > 0 && !isRestoring) {
-      putItem('app_state', { 
+      dbService.saveAppState('active_epub_metadata', { 
         id: 'active_epub_metadata', 
         chapters: epubChapters, 
         activeChapterId 

@@ -18,7 +18,7 @@ import { useEditor } from '../contexts/EditorContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { generateId } from '../utils/id';
 import { parseEpub, loadChapterText } from '../utils/epubParser';
-import { putItem, getItem, deleteItem } from '../utils/idb';
+import { dbService } from '../services/DatabaseService';
 import { isCapacitorNative, isElectron } from '../utils/fileSystem';
 
 // TOAST COMPONENT
@@ -161,7 +161,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   // PERSISTENCE LOGIC: EPUB RECOVERY
   useEffect(() => {
     const recoverEpub = async () => {
-        const savedEpub = await getItem('epub_files', 'active_epub_file');
+        const savedEpub = await dbService.getAppState('active_epub_file');
         if (savedEpub && savedEpub.blob) {
             const zip = new JSZip();
             const loadedZipContent = await zip.loadAsync(savedEpub.blob);
@@ -217,8 +217,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setActiveChapterId(null);
       localStorage.removeItem('editor_scroll_index');
       
-      await deleteItem('app_state', 'editor_source_content');
-      await deleteItem('app_state', 'editor_target_content');
+      await dbService.deleteAppState('editor_source_content');
+      await dbService.deleteAppState('editor_target_content');
 
       if (isLoading) handleStop();
   };
@@ -265,7 +265,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             const { chapters } = await parseEpub(file);
             setEpubChapters(chapters);
             
-            await putItem('epub_files', { id: 'active_epub_file', blob: file });
+            await dbService.saveAppState('active_epub_file', { id: 'active_epub_file', blob: file });
             
             setIsEpubModalOpen(true);
             showToastNotification(`${t('editor.epubLoaded')} (${chapters.length})`);
@@ -347,8 +347,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setLoadedZip(null);
       setActiveChapterId(null);
       setIsEpubModalOpen(false);
-      await deleteItem('epub_files', 'active_epub_file');
-      await deleteItem('app_state', 'active_epub_metadata');
+      await dbService.deleteAppState('active_epub_file');
+      await dbService.deleteAppState('active_epub_metadata');
   };
 
   const handleTranslate = async () => {

@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { NovelProject, SavedTranslation, SavedTranslationSummary, ChatMessage } from '../types';
 import { generateId } from '../utils/id';
+import { isElectron } from '../utils/fileSystem';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -44,6 +45,11 @@ CREATE TABLE IF NOT EXISTS chat_history (
     text TEXT NOT NULL,
     timestamp INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS app_state (
+    id TEXT PRIMARY KEY NOT NULL,
+    content TEXT NOT NULL
+);
 `;
 
 class DatabaseService {
@@ -53,7 +59,7 @@ class DatabaseService {
     private dbName: string = 'novtl_db_v2'; 
 
     constructor() {
-        this.isNative = Capacitor.isNativePlatform();
+        this.isNative = Capacitor.isNativePlatform() || isElectron();
     }
 
     async init(): Promise<void> {
@@ -87,32 +93,8 @@ class DatabaseService {
                 throw e; 
             }
         } else {
-            await this.initWebDB();
+            console.warn("Web/Browser environment detected. SQLite is not available. Data will NOT be persisted.");
         }
-    }
-
-    // --- WEB/ELECTRON FALLBACK (IndexedDB) ---
-    private async initWebDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 6); // Version bumped
-            request.onupgradeneeded = (event: any) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('chapters')) db.createObjectStore('chapters', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('chat')) db.createObjectStore('chat', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('glossary')) db.createObjectStore('glossary', { keyPath: 'id' });
-            };
-            request.onsuccess = () => resolve(true);
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    private async getWebDB(): Promise<IDBDatabase> {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, 6);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
     }
 
     // --- DANGER ZONE: WIPE ALL DATA ---
@@ -130,16 +112,6 @@ class DatabaseService {
             } catch (e) {
                 console.error("Error wiping SQLite:", e);
             }
-        } else {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.deleteDatabase(this.dbName);
-                req.onsuccess = () => {
-                    console.log("💣 IndexedDB wiped successfully");
-                    resolve();
-                };
-                req.onerror = () => reject(req.error);
-                req.onblocked = () => resolve(); 
-            });
         }
     }
 
@@ -168,14 +140,6 @@ class DatabaseService {
             }
 
             await this.db.executeSet(statements);
-        } else {
-            const db = await this.getWebDB();
-            const tx = db.transaction(['projects', 'glossary'], 'readwrite');
-            
-            tx.objectStore('projects').put(project);
-            
-            const glosStore = tx.objectStore('glossary');
-            project.glossary.forEach(g => glosStore.put({ ...g, project_id: project.id }));
         }
     }
 
@@ -209,13 +173,8 @@ class DatabaseService {
                     glossary: projectGlossary
                 };
             });
-        } else {
-            const db = await this.getWebDB();
-            return new Promise((resolve) => {
-                const req = db.transaction('projects', 'readonly').objectStore('projects').getAll();
-                req.onsuccess = () => resolve(req.result || []);
-            });
         }
+        return [];
     }
 
     // --- CRUD CHAPTERS ---
@@ -238,10 +197,6 @@ class DatabaseService {
             ];
 
             await this.db.executeSet(statements);
-        } else {
-            const db = await this.getWebDB();
-            const tx = db.transaction('chapters', 'readwrite');
-            tx.objectStore('chapters').put(chapter);
         }
     }
 
@@ -249,19 +204,8 @@ class DatabaseService {
         if (this.isNative && this.db) {
             const res = await this.db.query(`SELECT id, project_id as projectId, name, timestamp FROM chapters WHERE project_id = ? ORDER BY timestamp DESC`, [projectId]);
             return res.values as SavedTranslationSummary[] || [];
-        } else {
-            const db = await this.getWebDB();
-            return new Promise((resolve) => {
-                const tx = db.transaction('chapters', 'readonly');
-                const req = tx.objectStore('chapters').getAll();
-                req.onsuccess = () => {
-                    const all = req.result as SavedTranslation[];
-                    resolve(all.filter(c => c.projectId === projectId).map(c => ({
-                        id: c.id, projectId: c.projectId, name: c.name, timestamp: c.timestamp
-                    })));
-                };
-            });
         }
+        return [];
     }
 
     async getChapterById(id: string): Promise<SavedTranslation | undefined> {
@@ -276,13 +220,8 @@ class DatabaseService {
             return {
                 id: meta.id, projectId: meta.project_id, name: meta.name, translatedText: fullText, timestamp: meta.timestamp
             };
-        } else {
-            const db = await this.getWebDB();
-            return new Promise((resolve) => {
-                const req = db.transaction('chapters', 'readonly').objectStore('chapters').get(id);
-                req.onsuccess = () => resolve(req.result);
-            });
         }
+        return undefined;
     }
 
     async searchChaptersContent(projectId: string, query: string): Promise<SavedTranslation[]> {
@@ -302,46 +241,19 @@ class DatabaseService {
                 if (fullData) results.push(fullData);
             }
             return results;
-        } else {
-            const db = await this.getWebDB();
-            return new Promise((resolve) => {
-                const req = db.transaction('chapters', 'readonly').objectStore('chapters').getAll();
-                req.onsuccess = () => {
-                    const all = req.result as SavedTranslation[];
-                    const matches = all
-                        .filter(c => c.projectId === projectId && c.translatedText.toLowerCase().includes(query.toLowerCase()))
-                        .slice(0, 5);
-                    resolve(matches);
-                };
-            });
         }
+        return [];
     }
 
     async deleteChapter(id: string): Promise<void> {
         if (this.isNative && this.db) {
             await this.db.run(`DELETE FROM chapters WHERE id = ?`, [id]);
-        } else {
-            const db = await this.getWebDB();
-            const tx = db.transaction('chapters', 'readwrite');
-            tx.objectStore('chapters').delete(id);
         }
     }
 
     async clearProjectChapters(projectId: string): Promise<void> {
         if (this.isNative && this.db) {
             await this.db.run(`DELETE FROM chapters WHERE project_id = ?`, [projectId]);
-        } else {
-             const db = await this.getWebDB();
-             const tx = db.transaction('chapters', 'readwrite');
-             const store = tx.objectStore('chapters');
-             const req = store.openCursor();
-             req.onsuccess = (e: any) => {
-                 const cursor = e.target.result;
-                 if (cursor) {
-                     if (cursor.value.projectId === projectId) cursor.delete();
-                     cursor.continue();
-                 }
-             };
         }
     }
 
@@ -350,9 +262,6 @@ class DatabaseService {
             const text = JSON.stringify(message);
             await this.db.run(`INSERT OR REPLACE INTO chat_history (id, role, text, timestamp) VALUES (?, ?, ?, ?)`, 
                 [message.id, message.role, text, message.timestamp]);
-        } else {
-            const db = await this.getWebDB();
-            db.transaction('chat', 'readwrite').objectStore('chat').put(message);
         }
     }
 
@@ -366,23 +275,44 @@ class DatabaseService {
                     return { id: row.id, role: row.role, text: row.text, timestamp: row.timestamp };
                 }
             });
-        } else {
-            const db = await this.getWebDB();
-            return new Promise((resolve) => {
-                const req = db.transaction('chat', 'readonly').objectStore('chat').getAll();
-                req.onsuccess = () => resolve(req.result || []);
-            });
         }
+        return [];
     }
 
     async clearChat(): Promise<void> {
         if (this.isNative && this.db) {
             await this.db.run(`DELETE FROM chat_history`);
-        } else {
-            const db = await this.getWebDB();
-            db.transaction('chat', 'readwrite').objectStore('chat').clear();
+        }
+    }
+
+    // --- APP STATE (Replaces IndexedDB) ---
+    async saveAppState(id: string, content: any): Promise<void> {
+        if (this.isNative && this.db) {
+            const stringContent = JSON.stringify(content);
+            await this.db.run(`INSERT OR REPLACE INTO app_state (id, content) VALUES (?, ?)`, [id, stringContent]);
+        }
+    }
+
+    async getAppState(id: string): Promise<any | null> {
+        if (this.isNative && this.db) {
+            const res = await this.db.query(`SELECT content FROM app_state WHERE id = ?`, [id]);
+            if (res.values && res.values.length > 0) {
+                try {
+                    return JSON.parse(res.values[0].content);
+                } catch {
+                    return res.values[0].content;
+                }
+            }
+        }
+        return null;
+    }
+
+    async deleteAppState(id: string): Promise<void> {
+        if (this.isNative && this.db) {
+            await this.db.run(`DELETE FROM app_state WHERE id = ?`, [id]);
         }
     }
 }
 
 export const dbService = new DatabaseService();
+
