@@ -391,69 +391,63 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     }
   };
 
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveData, setSaveData] = useState({ number: 1, title: '' });
+
   /**
    * --- SMART AUTO-INCREMENT SAVE (PERBAIKAN TOTAL) ---
    * 1. Hapus total pengecekan ID lama. Selalu pakai generateId().
    * 2. Cari angka bab tertinggi dari nama di library.
    * 3. Jika ketemu "Chapter 1", maka bab baru otomatis "Chapter 2".
    */
-  const handleSaveTranslation = async () => {
+  const handleInitiateSave = async () => {
     if (!translatedText.trim()) return;
+    
+    try {
+        const summaries = await getTranslationSummariesByProjectId(activeProject.id);
+        
+        // Cari angka tertinggi dari chapterNumber yang ada di DB
+        const maxNum = summaries.reduce((max, s) => Math.max(max, s.chapterNumber || 0), 0);
+        const nextNum = maxNum + 1;
+        
+        let title = "";
+        
+        if (activeChapterId) {
+            const epubTitle = epubChapters.find(c => c.id === activeChapterId)?.title;
+            title = epubTitle || "";
+        }
+
+        setSaveData({ number: nextNum, title });
+        setIsSaveModalOpen(true);
+    } catch (e) {
+        console.error("Failed to init save:", e);
+    }
+  };
+
+  const handleConfirmSave = async () => {
+    setIsSaveModalOpen(false);
     setIsSaving(true);
     
     try {
-        // Simpan metadata proyek dulu
         await saveProjectToDB(activeProject);
         
-        // Ambil daftar bab yang sudah ada di library proyek ini
-        const summaries = await getTranslationSummariesByProjectId(activeProject.id);
-        
-        let nameToSave = "";
-        
-        // Cari angka tertinggi dari nama-nama yang berformat "Chapter {angka}"
-        const chapterNumbers = summaries
-            .map(s => {
-                const match = s.name.match(/Chapter\s+(\d+)/i);
-                return match ? parseInt(match[1], 10) : 0;
-            })
-            .filter(n => n > 0);
-        
-        // Tentukan nomor berikutnya
-        const nextNum = chapterNumbers.length > 0 ? Math.max(...chapterNumbers) + 1 : 1;
-        
-        // 1. Jika sumber dari EPUB dan baru pertama kali simpan bab ini
-        if (activeChapterId) {
-            const epubTitle = epubChapters.find(c => c.id === activeChapterId)?.title;
-            nameToSave = epubTitle || `Chapter ${nextNum}`;
-            
-            // Cek apakah judul ini sudah ada di Library (duplikat nama)
-            if (summaries.some(s => s.name === nameToSave)) {
-                nameToSave = `Chapter ${nextNum}`;
-            }
-        } 
-        // 2. Jika ketik manual atau EPUB yang sudah pernah disimpan
-        else {
-            nameToSave = `Chapter ${nextNum}`;
-        }
-
-        // CRITICAL FIX: SELALU PAKAI ID BARU.
-        // Inilah yang menjamin bab baru dibuat, bukan mengupdate yang lama.
         const freshId = generateId(); 
-        
+        const displayName = `Chapter ${saveData.number}${saveData.title ? `: ${saveData.title}` : ''}`;
+
         const newTranslation: SavedTranslation = {
           id: freshId,
           projectId: activeProject.id,
-          name: nameToSave,
+          name: displayName,
+          chapterNumber: saveData.number,
+          title: saveData.title,
           translatedText: translatedText,
           timestamp: new Date().toISOString(),
         };
         
         await saveTranslationToDB(newTranslation);
         
-        // Kosongkan activeChapterId agar simpan berikutnya tidak pakai judul EPUB yang sama
         setActiveChapterId(null); 
-
-        showToastNotification(`Saved as: ${nameToSave}`);
+        showToastNotification(`Saved: ${displayName}`);
     } catch (e: any) {
         console.error("Save failed:", e);
         setError(`Gagal menyimpan: ${e.message}`);
@@ -461,6 +455,40 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
         setIsSaving(false);
     }
   };
+
+  const SaveModal = () => (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-paper w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 space-y-4">
+              <h3 className="text-xl font-serif font-bold text-charcoal">Simpan Terjemahan</h3>
+              
+              <div className="space-y-2">
+                  <label className="text-xs font-bold text-subtle uppercase">Chapter Number</label>
+                  <input 
+                    type="number" 
+                    value={saveData.number} 
+                    onChange={(e) => setSaveData(prev => ({ ...prev, number: parseInt(e.target.value) || 0 }))}
+                    className="w-full p-3 rounded-xl bg-card border border-border outline-none font-bold text-charcoal focus:border-accent"
+                  />
+              </div>
+
+              <div className="space-y-2">
+                  <label className="text-xs font-bold text-subtle uppercase">Chapter Title (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={saveData.title} 
+                    onChange={(e) => setSaveData(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="e.g. The Beginning"
+                    className="w-full p-3 rounded-xl bg-card border border-border outline-none font-serif text-charcoal focus:border-accent"
+                  />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                  <button onClick={() => setIsSaveModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-subtle hover:bg-gray-100 transition-colors">Batal</button>
+                  <button onClick={handleConfirmSave} className="flex-1 py-3 rounded-xl font-bold bg-charcoal text-paper shadow-lg hover:bg-black transition-colors">Simpan</button>
+              </div>
+          </div>
+      </div>
+  );
 
   const ReadingModeModal = () => {
     const readingVirtuosoRef = useRef<VirtuosoHandle>(null);
@@ -537,6 +565,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold text-sm animate-bounce">⚠️ {error}</div>}
       {isTranslationFullscreen && portalRoot && ReactDOM.createPortal(<ReadingModeModal />, portalRoot)}
       {isEpubModalOpen && <EpubChapterModal />}
+      {isSaveModalOpen && <SaveModal />}
       
       <input type="file" ref={fileInputRef} onChange={handleFileInputChange} accept=".epub,.txt" className="hidden" />
 
@@ -702,7 +731,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 </button>
                 <button 
                   disabled={isLoading || isSaving || !translatedText.trim()} 
-                  onClick={handleSaveTranslation} 
+                  onClick={handleInitiateSave} 
                   className={`px-6 md:px-12 py-3.5 md:py-4 font-bold text-sm rounded-xl transition-all disabled:opacity-50 shadow-soft border border-border flex items-center gap-2 bg-paper text-charcoal hover:bg-gray-200 active:scale-95`}
                 >
                     {isSaving ? (

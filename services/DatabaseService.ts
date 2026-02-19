@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS chapters (
     id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL,
     name TEXT NOT NULL,
+    chapter_number INTEGER,
+    title TEXT,
     timestamp INTEGER NOT NULL,
     FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
@@ -84,6 +86,14 @@ class DatabaseService {
                 await this.db.execute('PRAGMA foreign_keys = ON;');
                 
                 await this.db.execute(SCHEMA);
+
+                // MIGRATION: Add new columns if they don't exist
+                try {
+                    await this.db.execute('ALTER TABLE chapters ADD COLUMN chapter_number INTEGER;');
+                } catch (e) {}
+                try {
+                    await this.db.execute('ALTER TABLE chapters ADD COLUMN title TEXT;');
+                } catch (e) {}
                 
                 await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_contents_chapter_id ON chapter_contents(chapter_id);`);
                 
@@ -183,8 +193,8 @@ class DatabaseService {
             // FIX: Gunakan executeSet agar transaksi aman dan tidak tabrakan dengan auto-save
             const statements = [
                 {
-                    statement: `INSERT OR REPLACE INTO chapters (id, project_id, name, timestamp) VALUES (?, ?, ?, ?)`,
-                    values: [chapter.id, chapter.projectId, chapter.name, chapter.timestamp]
+                    statement: `INSERT OR REPLACE INTO chapters (id, project_id, name, chapter_number, title, timestamp) VALUES (?, ?, ?, ?, ?, ?)`,
+                    values: [chapter.id, chapter.projectId, chapter.name, chapter.chapterNumber || 0, chapter.title || '', chapter.timestamp]
                 },
                 {
                     statement: `DELETE FROM chapter_contents WHERE chapter_id = ?`,
@@ -202,7 +212,7 @@ class DatabaseService {
 
     async getChapterSummaries(projectId: string): Promise<SavedTranslationSummary[]> {
         if (this.isNative && this.db) {
-            const res = await this.db.query(`SELECT id, project_id as projectId, name, timestamp FROM chapters WHERE project_id = ? ORDER BY timestamp DESC`, [projectId]);
+            const res = await this.db.query(`SELECT id, project_id as projectId, name, chapter_number as chapterNumber, title, timestamp FROM chapters WHERE project_id = ? ORDER BY chapter_number ASC, timestamp DESC`, [projectId]);
             return res.values as SavedTranslationSummary[] || [];
         }
         return [];
@@ -218,7 +228,13 @@ class DatabaseService {
             const fullText = (resContent.values || []).map((row: any) => row.text_content).join('\n');
 
             return {
-                id: meta.id, projectId: meta.project_id, name: meta.name, translatedText: fullText, timestamp: meta.timestamp
+                id: meta.id, 
+                projectId: meta.project_id, 
+                name: meta.name, 
+                chapterNumber: meta.chapter_number,
+                title: meta.title,
+                translatedText: fullText, 
+                timestamp: meta.timestamp
             };
         }
         return undefined;

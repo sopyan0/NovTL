@@ -36,6 +36,8 @@ export interface SavedTranslation {
   id: string;
   projectId: string; 
   name: string;
+  chapterNumber?: number; // NEW: Sequence number
+  title?: string; // NEW: Display title
   translatedText: string;
   timestamp: string;
 }
