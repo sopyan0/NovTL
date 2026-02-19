@@ -93,6 +93,51 @@ interface TranslationInterfaceProps {
     isSidebarCollapsed: boolean;
 }
 
+// Save Modal Component (Moved outside to prevent re-renders)
+const SaveModal: React.FC<{
+  isOpen: boolean;
+  saveData: { number: number; title: string };
+  setSaveData: React.Dispatch<React.SetStateAction<{ number: number; title: string }>>;
+  onClose: () => void;
+  onConfirm: () => void;
+}> = ({ isOpen, saveData, setSaveData, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-paper w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 space-y-4">
+              <h3 className="text-xl font-serif font-bold text-charcoal">Simpan Terjemahan</h3>
+              
+              <div className="space-y-2">
+                  <label className="text-xs font-bold text-subtle uppercase">Chapter Number</label>
+                  <input 
+                    type="number" 
+                    value={saveData.number} 
+                    onChange={(e) => setSaveData(prev => ({ ...prev, number: parseInt(e.target.value) || 0 }))}
+                    className="w-full p-3 rounded-xl bg-card border border-border outline-none font-bold text-charcoal focus:border-accent"
+                  />
+              </div>
+
+              <div className="space-y-2">
+                  <label className="text-xs font-bold text-subtle uppercase">Chapter Title (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={saveData.title} 
+                    onChange={(e) => setSaveData(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="e.g. The Beginning"
+                    className="w-full p-3 rounded-xl bg-card border border-border outline-none font-serif text-charcoal focus:border-accent"
+                  />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                  <button onClick={onClose} className="flex-1 py-3 rounded-xl font-bold text-subtle hover:bg-gray-100 transition-colors">Batal</button>
+                  <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-bold bg-charcoal text-paper shadow-lg hover:bg-black transition-colors">Simpan</button>
+              </div>
+          </div>
+      </div>
+  );
+};
+
 const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCollapsed }) => {
   const { settings, updateSettings, updateProject, activeProject } = useSettings();
   const { 
@@ -456,40 +501,6 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     }
   };
 
-  const SaveModal = () => (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-paper w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 space-y-4">
-              <h3 className="text-xl font-serif font-bold text-charcoal">Simpan Terjemahan</h3>
-              
-              <div className="space-y-2">
-                  <label className="text-xs font-bold text-subtle uppercase">Chapter Number</label>
-                  <input 
-                    type="number" 
-                    value={saveData.number} 
-                    onChange={(e) => setSaveData(prev => ({ ...prev, number: parseInt(e.target.value) || 0 }))}
-                    className="w-full p-3 rounded-xl bg-card border border-border outline-none font-bold text-charcoal focus:border-accent"
-                  />
-              </div>
-
-              <div className="space-y-2">
-                  <label className="text-xs font-bold text-subtle uppercase">Chapter Title (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={saveData.title} 
-                    onChange={(e) => setSaveData(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="e.g. The Beginning"
-                    className="w-full p-3 rounded-xl bg-card border border-border outline-none font-serif text-charcoal focus:border-accent"
-                  />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                  <button onClick={() => setIsSaveModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-subtle hover:bg-gray-100 transition-colors">Batal</button>
-                  <button onClick={handleConfirmSave} className="flex-1 py-3 rounded-xl font-bold bg-charcoal text-paper shadow-lg hover:bg-black transition-colors">Simpan</button>
-              </div>
-          </div>
-      </div>
-  );
-
   const ReadingModeModal = () => {
     const readingVirtuosoRef = useRef<VirtuosoHandle>(null);
     useEffect(() => {
@@ -565,7 +576,13 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold text-sm animate-bounce">⚠️ {error}</div>}
       {isTranslationFullscreen && portalRoot && ReactDOM.createPortal(<ReadingModeModal />, portalRoot)}
       {isEpubModalOpen && <EpubChapterModal />}
-      {isSaveModalOpen && <SaveModal />}
+      <SaveModal 
+        isOpen={isSaveModalOpen} 
+        saveData={saveData} 
+        setSaveData={setSaveData} 
+        onClose={() => setIsSaveModalOpen(false)} 
+        onConfirm={handleConfirmSave} 
+      />
       
       <input type="file" ref={fileInputRef} onChange={handleFileInputChange} accept=".epub,.txt" className="hidden" />
 

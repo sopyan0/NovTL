@@ -128,10 +128,16 @@ class DatabaseService {
     // --- CRUD PROJECTS ---
     async saveProject(project: NovelProject): Promise<void> {
         if (this.isNative && this.db) {
-            // FIX: Gunakan executeSet (Atomic Transaction) untuk mencegah crash "no transaction active"
+            // FIX: Gunakan UPSERT (ON CONFLICT DO UPDATE) agar tidak memicu ON DELETE CASCADE pada chapters
             const statements = [
                 {
-                    statement: `INSERT OR REPLACE INTO projects (id, name, sourceLanguage, targetLanguage, translationInstruction, last_modified) VALUES (?, ?, ?, ?, ?, ?)`,
+                    statement: `INSERT INTO projects (id, name, sourceLanguage, targetLanguage, translationInstruction, last_modified) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    sourceLanguage=excluded.sourceLanguage,
+                    targetLanguage=excluded.targetLanguage,
+                    translationInstruction=excluded.translationInstruction,
+                    last_modified=excluded.last_modified`,
                     values: [project.id, project.name, project.sourceLanguage, project.targetLanguage, project.translationInstruction, Date.now()]
                 },
                 {
@@ -190,19 +196,29 @@ class DatabaseService {
     // --- CRUD CHAPTERS ---
     async saveChapter(chapter: SavedTranslation): Promise<void> {
         if (this.isNative && this.db) {
-            // FIX: Gunakan executeSet agar transaksi aman dan tidak tabrakan dengan auto-save
+            // PERBAIKAN: Pastikan ID benar-benar unik untuk setiap bab
+            const chapterId = chapter.id || generateId(); 
+            
             const statements = [
                 {
                     statement: `INSERT OR REPLACE INTO chapters (id, project_id, name, chapter_number, title, timestamp) VALUES (?, ?, ?, ?, ?, ?)`,
-                    values: [chapter.id, chapter.projectId, chapter.name, chapter.chapterNumber || 0, chapter.title || '', chapter.timestamp]
+                    values: [
+                        chapterId, 
+                        chapter.projectId, 
+                        chapter.name, 
+                        Number(chapter.chapterNumber) || 0, 
+                        chapter.title || '', 
+                        chapter.timestamp || Date.now()
+                    ]
                 },
                 {
+                    // Hapus konten lama hanya untuk ID ini, lalu masukkan yang baru
                     statement: `DELETE FROM chapter_contents WHERE chapter_id = ?`,
-                    values: [chapter.id]
+                    values: [chapterId]
                 },
                 {
                     statement: `INSERT INTO chapter_contents (id, chapter_id, line_index, text_content) VALUES (?, ?, ?, ?)`,
-                    values: [generateId(), chapter.id, 0, chapter.translatedText]
+                    values: [generateId(), chapterId, 0, chapter.translatedText]
                 }
             ];
 
@@ -212,7 +228,7 @@ class DatabaseService {
 
     async getChapterSummaries(projectId: string): Promise<SavedTranslationSummary[]> {
         if (this.isNative && this.db) {
-            const res = await this.db.query(`SELECT id, project_id as projectId, name, chapter_number as chapterNumber, title, timestamp FROM chapters WHERE project_id = ? ORDER BY chapter_number ASC, timestamp DESC`, [projectId]);
+            const res = await this.db.query(`SELECT id, project_id as projectId, name, chapter_number as chapterNumber, title, timestamp FROM chapters WHERE project_id = ? ORDER BY chapter_number ASC, timestamp ASC`, [projectId]);
             return res.values as SavedTranslationSummary[] || [];
         }
         return [];

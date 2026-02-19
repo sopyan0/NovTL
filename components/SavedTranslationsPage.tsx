@@ -85,6 +85,9 @@ export default function SavedTranslationsPage() {
         if (sortOrder === 'newest') return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
         // Logika Oldest: Urutkan berdasarkan angka bab atau waktu terlama
         if (sortOrder === 'oldest') {
+            if (a.chapterNumber && b.chapterNumber) {
+                return a.chapterNumber - b.chapterNumber;
+            }
             const res = collator.compare(a.name, b.name);
             return res !== 0 ? res : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
         }
