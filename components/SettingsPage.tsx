@@ -263,7 +263,7 @@ const SettingsPage: React.FC = () => {
       </section>
 
       {/* GLOSSARY (REDESIGNED & FIXED THEME) */}
-      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-accent">
+      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-charcoal">
         
         {/* Header Glosarium */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-border">
@@ -398,17 +398,17 @@ const SettingsPage: React.FC = () => {
              </button>
              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json" />
          </div>
-         <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+         <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
              <div>
-                <p className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">{t('settings.storage.resetCache')}</p>
-                <p className="text-xs text-indigo-600/70 dark:text-indigo-300/60">
+                <p className="font-bold text-charcoal dark:text-gray-200 text-sm">{t('settings.storage.resetCache')}</p>
+                <p className="text-xs text-subtle">
                     {t('settings.storage.resetCacheDesc')}
                 </p>
              </div>
              <button 
                 onClick={handleClearCache} 
                 disabled={isCleaningCache}
-                className="bg-indigo-600 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 disabled:opacity-50"
+                className="bg-charcoal text-paper px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-black disabled:opacity-50 transition-colors"
              >
                  {isCleaningCache ? t('settings.storage.clearing') : t('settings.storage.resetButton')}
              </button>
