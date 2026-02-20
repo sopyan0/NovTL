@@ -9,7 +9,7 @@ export const LANGUAGES = [
 
 export const STORAGE_KEY = 'novtl_settings_v3_projects'; 
 
-export const LLM_PROVIDERS = ['Gemini', 'OpenAI (GPT)', 'DeepSeek', 'Grok (xAI)'];
+export const LLM_PROVIDERS = ['Gemini', 'OpenAI (GPT)', 'DeepSeek', 'Grok (xAI)', 'OpenRouter'];
 
 // Updated based on Google GenAI SDK guidelines
 export const PROVIDER_MODELS: Record<string, string[]> = {
@@ -22,14 +22,25 @@ export const PROVIDER_MODELS: Record<string, string[]> = {
   ],
   'OpenAI (GPT)': ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   'DeepSeek': ['deepseek-chat', 'deepseek-reasoner'],
-  'Grok (xAI)': ['grok-2-latest', 'grok-beta']
+  'Grok (xAI)': ['grok-2-latest', 'grok-beta'],
+  'OpenRouter': [
+      'anthropic/claude-3.5-sonnet',
+      'anthropic/claude-3-opus',
+      'meta-llama/llama-3.1-70b-instruct',
+      'meta-llama/llama-3.1-405b-instruct',
+      'google/gemini-pro-1.5',
+      'mistralai/mistral-large',
+      'openai/gpt-4o',
+      'nousresearch/hermes-3-llama-3.1-405b'
+  ]
 };
 
 export const DEFAULT_MODELS: Record<string, string> = {
   'Gemini': 'gemini-3-flash-preview', 
   'OpenAI (GPT)': 'gpt-4o', 
   'DeepSeek': 'deepseek-chat',
-  'Grok (xAI)': 'grok-2-latest'
+  'Grok (xAI)': 'grok-2-latest',
+  'OpenRouter': 'anthropic/claude-3.5-sonnet'
 };
 
 const DEFAULT_PROJECT_ID = 'default-project-001';
@@ -53,5 +64,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   version: 1,
   appLanguage: 'id', // Default to Indonesian
   theme: 'light',
-  translationMode: 'standard' 
+  translationMode: 'standard',
+  customModels: {} 
 };

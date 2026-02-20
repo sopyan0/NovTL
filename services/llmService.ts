@@ -8,8 +8,9 @@ import { searchTranslations, getTranslationSummariesByProjectId } from "../utils
 
 const API_ENDPOINTS: Record<string, string> = {
   'OpenAI (GPT)': 'https://api.openai.com/v1/chat/completions',
-  'DeepSeek': 'https://api.deepseek.com/chat/completions', // FIX: Typo corrected
-  'Grok (xAI)': 'https://api.x.ai/v1/chat/completions'
+  'DeepSeek': 'https://api.deepseek.com/chat/completions',
+  'Grok (xAI)': 'https://api.x.ai/v1/chat/completions',
+  'OpenRouter': 'https://openrouter.ai/api/v1/chat/completions'
 };
 
 interface AIClientConfig {
@@ -127,12 +128,19 @@ const generateTextSimple = async (
         });
         return response.text || "";
     } else if (config.endpoint) {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
+        };
+        
+        if (config.provider === 'OpenRouter') {
+            headers['HTTP-Referer'] = 'https://novtl.studio'; // Required by OpenRouter
+            headers['X-Title'] = 'NovTL Studio';
+        }
+
         const response = await fetch(config.endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
+            headers,
             body: JSON.stringify({
                 model: config.model,
                 messages: [
@@ -146,6 +154,57 @@ const generateTextSimple = async (
         return json.choices[0]?.message?.content || "";
     }
     return "";
+};
+
+// --- MODEL FETCHING (DYNAMIC) ---
+export const fetchAvailableModels = async (provider: string, apiKey: string): Promise<string[]> => {
+    if (!apiKey) return [];
+
+    try {
+        let url = '';
+        let headers: Record<string, string> = {};
+
+        if (provider === 'Gemini') {
+            // Gemini uses a different structure (GET param instead of Header)
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            
+            // Filter only models that support content generation
+            return (data.models || [])
+                .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+                .map((m: any) => m.name.replace('models/', ''))
+                .sort();
+        }
+
+        // Standard OpenAI-compatible endpoints
+        if (provider === 'OpenRouter') {
+            url = 'https://openrouter.ai/api/v1/models';
+            headers = { 'Authorization': `Bearer ${apiKey}` };
+        } else if (provider === 'OpenAI (GPT)') {
+            url = 'https://api.openai.com/v1/models';
+            headers = { 'Authorization': `Bearer ${apiKey}` };
+        } else if (provider === 'DeepSeek') {
+            url = 'https://api.deepseek.com/models';
+            headers = { 'Authorization': `Bearer ${apiKey}` };
+        } else if (provider === 'Grok (xAI)') {
+            url = 'https://api.x.ai/v1/models';
+            headers = { 'Authorization': `Bearer ${apiKey}` };
+        }
+
+        if (url) {
+            const response = await fetch(url, { headers });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            // Map to ID and sort alphabetically
+            return data.data.map((m: any) => m.id).sort();
+        }
+
+        return [];
+    } catch (error) {
+        console.error("Failed to fetch models:", error);
+        throw error;
+    }
 };
 
 // --- CORE GENERATION (TRANSLATION ENGINE) ---
@@ -174,7 +233,7 @@ export const translateTextStream = async (
   const chunks = splitTextByParagraphs(text, 2500); 
   let fullText = "";
   let previousContextSource = ""; 
-
+  
   for (const [index, chunk] of chunks.entries()) {
       if (signal?.aborted) throw new Error('AbortedByUser');
 
@@ -244,9 +303,19 @@ export const translateTextStream = async (
                         onChunk(chunkText); 
                     }
                 } else if (config.endpoint) {
+                    const headers: Record<string, string> = { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': `Bearer ${config.apiKey}` 
+                    };
+                    
+                    if (config.provider === 'OpenRouter') {
+                        headers['HTTP-Referer'] = 'https://novtl.studio';
+                        headers['X-Title'] = 'NovTL Studio';
+                    }
+
                     const response = await fetch(config.endpoint, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
+                        headers,
                         body: JSON.stringify({
                             model: config.model,
                             messages: [{ role: 'system', content: systemInstruction }, { role: 'user', content: promptToStream }],
@@ -482,7 +551,7 @@ export const chatWithAssistant = async (
     }
   } 
   
-  // --- STANDARD PROVIDERS (OpenAI, DeepSeek, Grok) ---
+  // --- STANDARD PROVIDERS (OpenAI, DeepSeek, Grok, OpenRouter) ---
   else if (config.endpoint) {
     try {
         const historyContent = history.filter(m => !m.isHidden).map(m => ({ 
@@ -490,12 +559,19 @@ export const chatWithAssistant = async (
             content: m.text.slice(0, 500) 
         })).slice(-6);
 
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
+        };
+
+        if (config.provider === 'OpenRouter') {
+            headers['HTTP-Referer'] = 'https://novtl.studio';
+            headers['X-Title'] = 'NovTL Studio';
+        }
+
         const response = await fetch(config.endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
+            headers,
             body: JSON.stringify({
                 model: config.model,
                 messages: [

@@ -62,7 +62,8 @@ export interface AppSettings {
   projects: NovelProject[];
   appLanguage: 'id' | 'en'; 
   theme: 'light' | 'dark'; 
-  translationMode: 'standard' | 'high_quality'; // NEW: Persist translation mode
+  translationMode: 'standard' | 'high_quality'; 
+  customModels?: Record<string, string[]>; // NEW: Store user-added models per provider
   version: number; 
 }
 

@@ -9,12 +9,14 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { dbService } from '../services/DatabaseService';
 import { getTranslationsByProjectId, saveTranslationToDB, saveGlossaryToDB } from '../utils/storage';
 import { triggerDownload } from '../utils/fileSystem';
+import { fetchAvailableModels } from '../services/llmService';
 
 const API_KEY_LINKS: Record<string, string> = {
     'Gemini': 'https://aistudio.google.com/app/apikey',
     'OpenAI (GPT)': 'https://platform.openai.com/api-keys',
     'DeepSeek': 'https://platform.deepseek.com/api_keys',
-    'Grok (xAI)': 'https://console.x.ai/'
+    'Grok (xAI)': 'https://console.x.ai/',
+    'OpenRouter': 'https://openrouter.ai/keys'
 };
 
 const SettingsPage: React.FC = () => {
@@ -36,12 +38,69 @@ const SettingsPage: React.FC = () => {
   const [glossarySearchTerm, setGlossarySearchTerm] = useState('');
   const [isCleaningCache, setIsCleaningCache] = useState(false);
   
+  // Model Fetching State
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
       setSelectedIds(new Set());
       setIsRenaming(false);
   }, []);
+
+  const handleOpenAddModel = async () => {
+      const apiKey = settings.apiKeys[settings.activeProvider];
+      if (!apiKey) {
+          alert(t('settings.ai.apiKey') + " Missing!");
+          return;
+      }
+
+      setIsFetchingModels(true);
+      try {
+          const models = await fetchAvailableModels(settings.activeProvider, apiKey);
+          if (models.length > 0) {
+              setFetchedModels(models);
+              setIsModelModalOpen(true);
+          } else {
+              alert("No models found. Check your API Key.");
+          }
+      } catch (e: any) {
+          alert(`Failed to fetch models: ${e.message}`);
+      } finally {
+          setIsFetchingModels(false);
+      }
+  };
+
+  const handleAddModel = (modelId: string) => {
+      const provider = settings.activeProvider;
+      const currentCustoms = settings.customModels?.[provider] || [];
+      
+      if (currentCustoms.includes(modelId)) {
+          alert("Model already added!");
+          return;
+      }
+
+      updateSettings(prev => ({
+          ...prev,
+          customModels: {
+              ...prev.customModels,
+              [provider]: [...currentCustoms, modelId]
+          }
+      }));
+      
+      // Auto-select the new model
+      updateModel(provider, modelId);
+      setIsModelModalOpen(false);
+  };
+
+  // Combine default and custom models
+  const currentProviderModels = [
+      ...(PROVIDER_MODELS[settings.activeProvider] || []),
+      ...(settings.customModels?.[settings.activeProvider] || [])
+  ];
 
   const updateGlobalSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     updateSettings({ [key]: value });
@@ -442,9 +501,22 @@ const SettingsPage: React.FC = () => {
                 </select>
             </div>
             <div className="space-y-2">
-                <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">{t('settings.ai.model')}</label>
+                <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-subtle uppercase tracking-widest">{t('settings.ai.model')}</label>
+                    <button 
+                        onClick={handleOpenAddModel} 
+                        disabled={isFetchingModels}
+                        className="text-[10px] font-bold text-accent hover:underline disabled:opacity-50 flex items-center gap-1"
+                    >
+                        {isFetchingModels ? (
+                            <span className="animate-spin">↻</span>
+                        ) : (
+                            <span>+ Tambah Model</span>
+                        )}
+                    </button>
+                </div>
                 <select value={settings.selectedModel[settings.activeProvider] || DEFAULT_MODELS[settings.activeProvider]} onChange={(e) => updateModel(settings.activeProvider, e.target.value)} className="w-full p-4 rounded-2xl bg-card border border-border text-charcoal text-sm font-bold outline-none appearance-none">
-                    {(PROVIDER_MODELS[settings.activeProvider] || []).map(m => <option key={m} value={m}>{m}</option>)}
+                    {currentProviderModels.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
             </div>
             <div className="md:col-span-2 space-y-2">
@@ -456,6 +528,52 @@ const SettingsPage: React.FC = () => {
             </div>
         </div>
       </section>
+
+      {/* ADD MODEL MODAL */}
+      {isModelModalOpen && portalRoot && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-paper w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="p-6 border-b border-border flex justify-between items-center bg-card">
+                    <div>
+                        <h3 className="text-lg font-bold text-charcoal">Tambah Model ({settings.activeProvider})</h3>
+                        <p className="text-xs text-subtle">Pilih model yang ingin ditambahkan ke list.</p>
+                    </div>
+                    <button onClick={() => setIsModelModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">✕</button>
+                </div>
+                
+                <div className="p-4 border-b border-border bg-gray-50">
+                    <input 
+                        type="text" 
+                        placeholder="Cari model..." 
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                        className="w-full p-3 rounded-xl bg-white border border-border text-sm outline-none focus:border-accent"
+                    />
+                </div>
+
+                <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
+                    {fetchedModels
+                        .filter(m => m.toLowerCase().includes(modelSearch.toLowerCase()))
+                        .map(model => {
+                            const isAdded = currentProviderModels.includes(model);
+                            return (
+                                <button 
+                                    key={model} 
+                                    onClick={() => handleAddModel(model)}
+                                    disabled={isAdded}
+                                    className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between group border mb-1 ${isAdded ? 'bg-green-50 border-green-200 opacity-60' : 'hover:bg-gray-100 border-transparent'}`}
+                                >
+                                    <span className="font-mono text-xs text-charcoal truncate">{model}</span>
+                                    {isAdded ? <span className="text-green-600 text-[10px] font-bold">ADDED</span> : <span className="text-accent text-lg font-bold">+</span>}
+                                </button>
+                            );
+                        })
+                    }
+                </div>
+            </div>
+        </div>,
+        portalRoot
+      )}
 
       <ConfirmDialog isOpen={isConfirmDeleteGlossaryOpen} onClose={() => setIsConfirmDeleteGlossaryOpen(false)} onConfirm={() => { updateProject(activeProject.id, prev => ({ ...prev, glossary: prev.glossary.filter(i => i.id !== glossaryItemToDeleteId) })); setGlossaryItemToDeleteId(null); }} title={t('settings.glossary.confirmDeleteTitle')} message={t('settings.glossary.confirmDeleteMsg')} isDestructive={true} />
       <ConfirmDialog isOpen={isConfirmBulkDeleteOpen} onClose={() => setIsConfirmBulkDeleteOpen(false)} onConfirm={() => { updateProject(activeProject.id, prev => ({ ...prev, glossary: prev.glossary.filter(i => !selectedIds.has(i.id)) })); setSelectedIds(new Set()); }} title={t('settings.glossary.confirmBulkDeleteTitle')} message={t('settings.glossary.confirmBulkDeleteMsg')} isDestructive={true} />
