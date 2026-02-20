@@ -158,17 +158,28 @@ const generateTextSimple = async (
 
 // --- MODEL FETCHING (DYNAMIC) ---
 export const fetchAvailableModels = async (provider: string, apiKey: string): Promise<string[]> => {
-    if (!apiKey) return [];
+    const cleanKey = apiKey?.trim();
+    if (!cleanKey) return [];
 
     try {
         let url = '';
         let headers: Record<string, string> = {};
 
         if (provider === 'Gemini') {
-            // Gemini uses a different structure (GET param instead of Header)
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            // Revert to using Header for Gemini as it was working previously
+            // Using query param (?key=) caused issues for the user
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models`, {
+                headers: {
+                    'x-goog-api-key': cleanKey
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.error?.message || `Gemini API Error: ${response.status} ${response.statusText}`);
+            }
+
             const data = await response.json();
-            if (data.error) throw new Error(data.error.message);
             
             // Filter only models that support content generation
             return (data.models || [])
@@ -180,30 +191,54 @@ export const fetchAvailableModels = async (provider: string, apiKey: string): Pr
         // Standard OpenAI-compatible endpoints
         if (provider === 'OpenRouter') {
             url = 'https://openrouter.ai/api/v1/models';
-            headers = { 'Authorization': `Bearer ${apiKey}` };
+            headers = { 
+                'Authorization': `Bearer ${cleanKey}`,
+                'HTTP-Referer': 'https://novtl.studio',
+                'X-Title': 'NovTL Studio'
+            };
         } else if (provider === 'OpenAI (GPT)') {
             url = 'https://api.openai.com/v1/models';
-            headers = { 'Authorization': `Bearer ${apiKey}` };
+            headers = { 'Authorization': `Bearer ${cleanKey}` };
         } else if (provider === 'DeepSeek') {
             url = 'https://api.deepseek.com/models';
-            headers = { 'Authorization': `Bearer ${apiKey}` };
+            headers = { 'Authorization': `Bearer ${cleanKey}` };
         } else if (provider === 'Grok (xAI)') {
             url = 'https://api.x.ai/v1/models';
-            headers = { 'Authorization': `Bearer ${apiKey}` };
+            headers = { 'Authorization': `Bearer ${cleanKey}` };
         }
 
         if (url) {
-            const response = await fetch(url, { headers });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            // Map to ID and sort alphabetically
-            return data.data.map((m: any) => m.id).sort();
+            try {
+                const response = await fetch(url, { headers });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => null);
+                    const errorMessage = errorData?.error?.message || errorData?.message || `HTTP Error ${response.status}`;
+                    if (response.status === 401) throw new Error(`Invalid API Key for ${provider} (401). Please check your key.`);
+                    throw new Error(errorMessage);
+                }
+
+                const data = await response.json();
+                
+                if (!data.data || !Array.isArray(data.data)) {
+                    throw new Error(`Unexpected response format from ${provider}`);
+                }
+
+                // Map to ID and sort alphabetically
+                return data.data.map((m: any) => m.id).sort();
+            } catch (fetchError: any) {
+                // Handle CORS errors specifically for OpenAI/DeepSeek/Grok
+                if (fetchError.message === 'Failed to fetch' || fetchError.name === 'TypeError') {
+                    throw new Error(`Connection failed. ${provider} likely blocks direct browser access (CORS). Please use OpenRouter or a proxy.`);
+                }
+                throw fetchError;
+            }
         }
 
         return [];
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to fetch models:", error);
-        throw error;
+        throw new Error(error.message || "Unknown error during model fetch");
     }
 };
 

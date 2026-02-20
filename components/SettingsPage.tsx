@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
+import { createPortal } from 'react-dom';
 import { AppSettings, GlossaryItem, NovelProject } from '../types';
 import { LLM_PROVIDERS, PROVIDER_MODELS, DEFAULT_MODELS } from '../constants'; 
 import ConfirmDialog from './ConfirmDialog'; 
@@ -288,7 +288,7 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <button onClick={() => setIsCreatingProject(true)} className="bg-charcoal text-paper px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all whitespace-nowrap">{t('settings.project.new')}</button>
                 
-                {isCreatingProject && portalRoot && ReactDOM.createPortal(
+                {isCreatingProject && portalRoot && createPortal(
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-paper w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4 relative">
                             <h3 className="text-lg font-bold text-charcoal">{t('settings.project.new')}</h3>
@@ -530,7 +530,7 @@ const SettingsPage: React.FC = () => {
       </section>
 
       {/* ADD MODEL MODAL */}
-      {isModelModalOpen && portalRoot && ReactDOM.createPortal(
+      {isModelModalOpen && portalRoot && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
             <div className="bg-paper w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                 <div className="p-6 border-b border-border flex justify-between items-center bg-card">

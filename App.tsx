@@ -19,11 +19,11 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { AuthProvider } from './contexts/AuthContext'; 
 import { AuthGuard } from './components/AuthGuard'; 
 import { ensureDbReady } from './utils/storage';
+import AIChatDrawer from './components/AIChatDrawer';
+import HelpModal from './components/HelpModal';
 
 // Lazy Load Heavy Components
-const SavedTranslationsPage = React.lazy(() => import('./components/SavedTranslationsPage'));
-const AIChatDrawer = React.lazy(() => import('./components/AIChatDrawer'));
-const HelpModal = React.lazy(() => import('./components/HelpModal')); 
+const SavedTranslationsPage = React.lazy(() => import('./components/SavedTranslationsPage')); 
 
 // Wrapper to cleaner App component
 const AppProviders: React.FC<{children: React.ReactNode}> = ({ children }) => (
@@ -120,20 +120,18 @@ const AppContent: React.FC = () => {
         </svg>
       </button>
 
-      {/* Lazy Load Drawers and Modals */}
-      <Suspense fallback={null}>
-        <AIChatDrawer 
-          isOpen={isChatOpen} 
-          onClose={() => setIsChatOpen(false)} 
-        />
-        
-        {isHelpOpen && (
-            <HelpModal 
-                isOpen={isHelpOpen} 
-                onClose={() => setIsHelpOpen(false)} 
-            />
-        )}
-      </Suspense>
+      {/* Drawers and Modals */}
+      <AIChatDrawer 
+        isOpen={isChatOpen} 
+        onClose={() => setIsChatOpen(false)} 
+      />
+      
+      {isHelpOpen && (
+          <HelpModal 
+              isOpen={isHelpOpen} 
+              onClose={() => setIsHelpOpen(false)} 
+          />
+      )}
     </div>
   );
 };
