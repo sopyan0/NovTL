@@ -615,12 +615,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       )}
 
       {showPromptInput && (
-        <div className="bg-gradient-to-r from-[#FFFBF0] to-[#FFF5E6] p-6 rounded-3xl border border-orange-100 animate-in slide-in-from-top-2 shadow-soft">
+        <div className="bg-gradient-to-r from-[#FFFBF0] to-[#FFF5E6] dark:from-gray-800 dark:to-gray-900 p-6 rounded-3xl border border-orange-100 dark:border-gray-700 animate-in slide-in-from-top-2 shadow-soft">
             <div className="flex justify-between items-center mb-3">
-                <label className="text-[10px] font-bold text-orange-800 uppercase tracking-widest">{t('editor.instruction')}</label>
-                <button onClick={handleResetPrompt} className="text-[10px] font-bold text-orange-600 bg-orange-100 px-3 py-1.5 rounded-lg border border-orange-200">↺ Reset Default</button>
+                <label className="text-[10px] font-bold text-orange-800 dark:text-orange-300 uppercase tracking-widest">{t('editor.instruction')}</label>
+                <button onClick={handleResetPrompt} className="text-[10px] font-bold text-orange-600 bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300 px-3 py-1.5 rounded-lg border border-orange-200 dark:border-orange-800">↺ Reset Default</button>
             </div>
-            <textarea value={tempInstruction} onChange={(e) => setTempInstruction(e.target.value)} className="w-full bg-white/60 p-4 rounded-2xl border border-orange-100 text-charcoal text-sm font-serif leading-relaxed outline-none" rows={2} />
+            <textarea value={tempInstruction} onChange={(e) => setTempInstruction(e.target.value)} className="w-full bg-white/60 dark:bg-black/40 p-4 rounded-2xl border border-orange-100 dark:border-gray-700 text-charcoal dark:text-gray-200 text-sm font-serif leading-relaxed outline-none" rows={2} />
         </div>
       )}
 
@@ -632,7 +632,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-8">
         <div className="flex flex-col h-full relative group">
-          <div className="absolute -top-3 left-6 z-10 pointer-events-none flex items-center gap-2">
+          <div className="absolute -top-3 left-6 z-20 pointer-events-none flex items-center gap-2">
                <span className="text-[10px] font-bold text-subtle bg-paper px-3 py-1 uppercase tracking-widest border border-border rounded-md shadow-sm">{t('editor.source')}</span>
           </div>
           

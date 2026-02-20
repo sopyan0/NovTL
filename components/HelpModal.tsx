@@ -67,7 +67,7 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                         <li><strong>{t('help.start.step1')}:</strong> {t('help.start.step1Desc')}</li>
                         <li><strong>{t('help.start.step2')}:</strong> {t('help.start.step2Desc')}</li>
                         <li><strong>{t('help.start.step3')}:</strong> {t('help.start.step3Desc')}</li>
-                        <li><strong>{t('help.start.step4')}:</strong> {t('help.start.step4Desc')}</li>
+                        <li><strong>{t('help.start.step4')}:</strong> Simpan bab Anda dengan tombol 'Save'. Sistem otomatis mendeteksi nomor bab selanjutnya (Auto-Increment) agar tidak menimpa bab lama.</li>
                     </ol>
                 </div>
             )}
@@ -81,7 +81,6 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <li>{t('help.api.step1')} <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.</li>
                             <li>{t('help.api.step2')}</li>
                             <li>{t('help.api.step3')}</li>
-                            <li>{t('help.api.step4')}</li>
                         </ul>
                     </div>
                 </div>
@@ -100,20 +99,12 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             <span className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200 p-2 rounded-lg text-xs font-bold mt-1">2</span>
                             <div>{t('help.glossary.step2')}</div>
                         </li>
-                        <li className="flex gap-3 items-start">
-                            <span className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-200 p-2 rounded-lg text-xs font-bold mt-1">3</span>
-                            <div>{t('help.glossary.step3')}</div>
-                        </li>
                     </ul>
                 </div>
             )}
 
             {activeTab === 'faq' && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                    <div>
-                        <h4 className="font-bold text-charcoal">{t('help.faq.q4')}</h4>
-                        <p className="text-subtle text-sm bg-orange-50 dark:bg-orange-900/10 p-2 rounded-lg border border-orange-100 dark:border-orange-900/20">{t('help.faq.a4')}</p>
-                    </div>
                     <div>
                         <h4 className="font-bold text-charcoal">{t('help.faq.q1')}</h4>
                         <p className="text-subtle text-sm">{t('help.faq.a1')}</p>

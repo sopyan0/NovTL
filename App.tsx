@@ -157,10 +157,10 @@ const App: React.FC = () => {
 
   if (!isSystemReady) {
       return (
-          <div className="flex flex-col items-center justify-center min-h-screen bg-paper text-charcoal">
-               <div className="dango-loader text-5xl mb-4">🍡</div>
-               <h2 className="text-xl font-serif font-bold animate-pulse">NovTL Studio</h2>
-               <p className="text-xs text-subtle mt-2">Loading Database...</p>
+          <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8F7F2] p-4 text-center">
+               <div className="dango-loader text-5xl mb-4 animate-bounce">🍡</div>
+               <h2 className="text-xl font-serif font-bold text-charcoal animate-pulse">NovTL Studio</h2>
+               <p className="text-xs text-subtle mt-2">Initializing System...</p>
           </div>
       );
   }

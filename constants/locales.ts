@@ -174,17 +174,15 @@ export const TRANSLATIONS = {
         step2Desc: "Use the 'Prompt' button to tell the AI how to translate (e.g. 'Captivating prose').",
         step3: "Glossary",
         step3Desc: "Add characters/terms in Settings. AI will strictly follow your dictionary.",
-        step4: "Translate & Save (Important!)",
-        step4Desc: "When editing an old chapter, the button says 'UPDATE'. To save as a NEW chapter copy, click the red 'X' button first."
+        step4: "Translate & Save",
+        step4Desc: "Click 'Save' to store your chapter. The system automatically detects the next chapter number (Auto-Increment) to prevent overwriting."
       },
       api: {
         title: "Setting up the AI",
         geminiTitle: "Google Gemini (Recommended)",
         step1: "Get a free API Key from Google AI Studio.",
         step2: "Click the 🔑 API button in NovTL.",
-        step3: "Paste your key and select the Gemini Flash model.",
-        step4: "Now you're ready to translate!",
-        note: "Privacy: Your API Key is only stored in your device's memory."
+        step3: "Paste your key and select the Gemini Flash model."
       },
       glossary: {
         title: "Mastering the Glossary",
@@ -387,17 +385,15 @@ export const TRANSLATIONS = {
         step2Desc: "Gunakan tombol 'Prompt' untuk mengatur gaya bahasa (misal: 'Bahasa Novel Populer').",
         step3: "Glosarium",
         step3Desc: "Tambah nama karakter/istilah di Setelan agar AI tidak salah menerjemahkan.",
-        step4: "Terjemah & Aman Simpan (Penting!)",
-        step4Desc: "Jika Anda mengedit bab lama, tombol akan berubah menjadi 'UPDATE'. Untuk menyimpan sebagai BAB BARU (Copy), klik tombol 'X' merah di sebelahnya."
+        step4: "Terjemah & Simpan",
+        step4Desc: "Klik 'Simpan' untuk menyimpan bab. Sistem otomatis mendeteksi nomor bab selanjutnya (Auto-Increment) agar tidak menimpa bab lama."
       },
       api: {
         title: "Menyiapkan Otak AI",
         geminiTitle: "Google Gemini (Rekomendasi)",
         step1: "Dapatkan API Key gratis di Google AI Studio.",
         step2: "Klik tombol 🔑 API di halaman utama NovTL.",
-        step3: "Tempel kunci Anda dan pilih model Gemini Flash.",
-        step4: "Selesai! Anda siap menerjemahkan ribuan kata.",
-        note: "Privasi: API Key hanya disimpan di memori perangkat Anda."
+        step3: "Tempel kunci Anda dan pilih model Gemini Flash."
       },
       glossary: {
         title: "Menguasai Glosarium",
@@ -420,9 +416,7 @@ export const TRANSLATIONS = {
         q2: "Bisa baca offline?",
         a2: "Bisa! Setelah bab disimpan, Anda bisa membacanya tanpa koneksi internet.",
         q3: "Cara baca di aplikasi lain?",
-        a3: "Gunakan tombol 'Download EPUB' untuk dibuka di Google Play Books atau Moon+ Reader.",
-        q4: "Kenapa tombol Simpan berubah jadi Update?",
-        a4: "Ini fitur pengaman agar bab tidak tertimpa tanpa sengaja. Jika tombolnya 'UPDATE', artinya Anda sedang mengedit bab lama. Klik tombol 'X' merah untuk memaksa simpan sebagai Bab Baru."
+        a3: "Gunakan tombol 'Download EPUB' untuk dibuka di Google Play Books atau Moon+ Reader."
       }
     }
   }

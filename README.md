@@ -19,7 +19,7 @@ NovTL Studio adalah stasiun kerja AI profesional yang dirancang khusus untuk men
 
 ## 🛠️ Fitur Utama (New)
 
-- **🛡️ Smart Safe-Save (Baru!)**: Sistem penyimpanan cerdas yang membedakan antara "Simpan Bab Baru" dan "Update Bab Lama". Mencegah bab tertimpa secara tidak sengaja. Gunakan tombol **X** untuk membatalkan mode edit.
+- **🛡️ Smart Auto-Save (Baru!)**: Sistem penyimpanan cerdas dengan Auto-Increment. Bab baru otomatis diberi nomor urut (Chapter 1, 2, 3...) tanpa menimpa bab sebelumnya.
 - **🧠 Context-Aware AI**: AI mengingat konteks bab sebelumnya. Saat menerjemahkan Bab 5, AI otomatis membaca akhir Bab 4 dari database agar transisi cerita mulus.
 - **⚡ SQLite Engine**: Menggunakan database SQLite (native di Android) untuk menyimpan ribuan bab tanpa membuat HP lemot.
 - **🤖 Danggo Assistant**: Chatbot asisten yang bisa membaca isi editor, mencari informasi di bab-bab lama (Deep Search), dan mengelola glosarium lewat perintah suara/teks.

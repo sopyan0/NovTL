@@ -92,14 +92,16 @@ const splitTextByParagraphs = (text: string, maxTokens: number = 3000): string[]
   return chunks.filter(c => c.length > 0);
 };
 
-const getSmartSnippet = (text: string, maxLen: number = 1000): string => {
+const getSmartSnippet = (text: string, maxLen: number = 2500): string => {
     if (!text) return "(KOSONG)";
     if (text.length <= maxLen) return text;
-    const headLen = Math.floor(maxLen * 0.6);
-    const tailLen = Math.floor(maxLen * 0.4);
+    // Prioritize the END of the text if it's a draft, assuming user is working at the bottom
+    // But for general context, a mix is better.
+    const headLen = Math.floor(maxLen * 0.3);
+    const tailLen = Math.floor(maxLen * 0.7);
     const hiddenCount = text.length - (headLen + tailLen);
     return text.slice(0, headLen) + 
-           `\n\n... [${hiddenCount} chars cut to save quota] ...\n\n` + 
+           `\n\n... [${hiddenCount} chars cut] ...\n\n` + 
            text.slice(-tailLen);
 };
 
@@ -430,8 +432,9 @@ export const chatWithAssistant = async (
     PERATURAN PENTING:
     1. Anda bisa melihat teks di 'EDITOR DRAFT'.
     2. Jika user bertanya "cari tentang X", gunakan tool 'read_historical_content'.
-    3. CEK GLOSARIUM DI ATAS DULU sebelum menyarankan penambahan kata.
-    4. HANYA panggil tool jika ada instruksi EKSPLESIT.`;
+    3. Jika user bertanya tentang kata spesifik yang TIDAK ada di snippet, JANGAN MENGARANG. Katakan: "Saya tidak melihat teks tersebut di potongan yang saya baca. Bisa tolong copy-paste bagian itu?"
+    4. CEK GLOSARIUM DI ATAS DULU sebelum menyarankan penambahan kata.
+    5. HANYA panggil tool jika ada instruksi EKSPLESIT.`;
 
   const systemPromptEN = `You are Danggo🍡, a Novel Assistant.
     
@@ -440,8 +443,9 @@ export const chatWithAssistant = async (
     IMPORTANT RULES:
     1. You can see the 'EDITOR DRAFT'.
     2. If user asks to "search for X", use 'read_historical_content' tool.
-    3. CHECK THE GLOSSARY ABOVE FIRST before suggesting additions.
-    4. ONLY use tools if explicitly asked.`;
+    3. If user asks about specific text NOT in the snippet, DO NOT HALLUCINATE. Say: "I cannot see that text in my current snippet. Could you copy-paste it for me?"
+    4. CHECK THE GLOSSARY ABOVE FIRST before suggesting additions.
+    5. ONLY use tools if explicitly asked.`;
 
   const systemPrompt = language === 'en' ? systemPromptEN : systemPromptID;
 

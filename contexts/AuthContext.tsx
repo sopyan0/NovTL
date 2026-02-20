@@ -25,17 +25,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<LocalUser | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [user, setUser] = useState<LocalUser | null>(LOCAL_USER);
+    const [isLoading, setIsLoading] = useState(false);
 
-    useEffect(() => {
-        // Langsung masuk sebagai user lokal (Offline First)
-        const timer = setTimeout(() => {
-            setUser(LOCAL_USER);
-            setIsLoading(false);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, []);
+    // useEffect(() => {
+    //     // Langsung masuk sebagai user lokal (Offline First)
+    //     const timer = setTimeout(() => {
+    //         setUser(LOCAL_USER);
+    //         setIsLoading(false);
+    //     }, 300);
+    //     return () => clearTimeout(timer);
+    // }, []);
 
     const signInWithGoogle = async () => {
         alert("Mode Lokal: Tidak memerlukan login cloud.");

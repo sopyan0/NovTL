@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { SavedTranslation, SavedTranslationSummary } from '../types';
 import ConfirmDialog from './ConfirmDialog'; 
 import { 
@@ -16,6 +17,8 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
 const ITEMS_PER_PAGE = 12;
+
+const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9 \-_]/gi, '_').trim();
 
 export default function SavedTranslationsPage() {
   const { settings } = useSettings();
@@ -255,7 +258,7 @@ export default function SavedTranslationsPage() {
 
   const handleCloseReadingFullScreen = () => {
     if (currentReadingTranslation) {
-         localStorage.removeItem(`novtl_read_pos_${currentReadingTranslation.id}`);
+         // Cleanup if needed, but we persist index now
     }
     setIsEditingContent(false);
     setIsReadingFullScreen(false);
@@ -265,9 +268,8 @@ export default function SavedTranslationsPage() {
 
   const handleNextChapter = async () => {
       if (nextChapterSummary) {
-          if (currentReadingTranslation) {
-              localStorage.removeItem(`novtl_read_pos_${currentReadingTranslation.id}`);
-          }
+          // Reset scroll for new chapter
+          localStorage.removeItem(`novtl_read_index_${nextChapterSummary.id}`);
           await loadChapterContent(nextChapterSummary.id);
       }
   };
@@ -275,7 +277,8 @@ export default function SavedTranslationsPage() {
   const handleDownloadReading = async () => {
     if (currentReadingTranslation) {
       const blob = new Blob([currentReadingTranslation.translatedText], { type: 'text/plain' });
-      await triggerDownload(`${currentReadingTranslation.name}.txt`, blob);
+      const safeName = sanitizeFilename(currentReadingTranslation.name);
+      await triggerDownload(`${safeName}.txt`, blob);
     }
   };
 
@@ -284,7 +287,8 @@ export default function SavedTranslationsPage() {
     try {
         const { generateEpub } = await import('../utils/epubGenerator');
         const blob = await generateEpub(activeProject, [currentReadingTranslation]);
-        await triggerDownload(`${currentReadingTranslation.name}.epub`, blob);
+        const safeName = sanitizeFilename(currentReadingTranslation.name);
+        await triggerDownload(`${safeName}.epub`, blob);
     } catch (e) {
         console.error("Failed single epub", e);
     }
@@ -300,23 +304,29 @@ export default function SavedTranslationsPage() {
   };
 
   const ReadingModeModal = () => {
+      const readingVirtuosoRef = useRef<VirtuosoHandle>(null);
+      const [initialIndex, setInitialIndex] = useState(0);
+
       useLayoutEffect(() => {
-        if (currentReadingTranslation && readingContainerRef.current) {
-            const savedPos = localStorage.getItem(`novtl_read_pos_${currentReadingTranslation.id}`);
+        if (currentReadingTranslation) {
+            const savedPos = localStorage.getItem(`novtl_read_index_${currentReadingTranslation.id}`);
             if (savedPos) {
-                const pos = parseInt(savedPos, 10);
-                if (!isNaN(pos)) {
-                    readingContainerRef.current.scrollTop = pos;
+                const index = parseInt(savedPos, 10);
+                if (!isNaN(index)) {
+                    setInitialIndex(index);
                 }
             }
         }
       }, []);
 
-      const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+      const handleScrollIndex = (index: number) => {
           if (!currentReadingTranslation) return;
-          const target = e.currentTarget;
-          localStorage.setItem(`novtl_read_pos_${currentReadingTranslation.id}`, target.scrollTop.toString());
+          localStorage.setItem(`novtl_read_index_${currentReadingTranslation.id}`, index.toString());
       };
+
+      const paragraphs = useMemo(() => {
+          return currentReadingTranslation ? currentReadingTranslation.translatedText.split('\n') : [];
+      }, [currentReadingTranslation]);
 
       return (
         <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[10000] bg-paper overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 m-0 p-0 border-none outline-none">
@@ -347,47 +357,53 @@ export default function SavedTranslationsPage() {
                     </div>
                 </div>
             </div>
-            <div 
-                ref={readingContainerRef} 
-                onScroll={handleScroll}
-                className="flex-grow overflow-y-auto w-full h-full pt-24 px-4 md:px-0 custom-scrollbar scroll-smooth"
-            >
-                <div className="max-w-3xl mx-auto min-h-full">
+            <div className="flex-grow w-full h-full pt-24 px-4 md:px-0">
+                <div className="max-w-3xl mx-auto h-full">
                     {isEditingContent ? (
-                        <div className="pt-8">
+                        <div className="pt-8 h-full pb-24">
                             <textarea 
                                 value={tempContent}
                                 onChange={(e) => setTempContent(e.target.value)}
-                                className="w-full h-[70vh] p-6 text-lg font-serif leading-loose outline-none resize-none bg-card rounded-xl border border-border focus:border-accent shadow-inner-light text-charcoal"
+                                className="w-full h-full p-6 text-lg font-serif leading-loose outline-none resize-none bg-card rounded-xl border border-border focus:border-accent shadow-inner-light text-charcoal custom-scrollbar"
                             />
                         </div>
                     ) : (
-                        <article className="prose prose-lg md:prose-xl max-w-none font-serif leading-loose text-justify text-charcoal selection:bg-accent/20 dark:prose-invert">
-                            {currentReadingTranslation!.translatedText.split('\n').map((para, i) => (
-                                para.trim() ? <p key={i} className="mb-6 indent-8">{para}</p> : <br key={i}/>
-                            ))}
-                        </article>
-                    )}
-                    {!isEditingContent && (
-                        <div className="mt-24 pt-12 border-t border-border text-center pb-24">
-                            {nextChapterSummary ? (
-                                <div>
-                                    <p className="text-subtle text-sm mb-4 uppercase tracking-widest font-bold">{t('library.continueReading')}</p>
-                                    <button 
-                                        onClick={handleNextChapter}
-                                        className="group relative inline-flex items-center justify-center px-8 py-5 font-serif font-bold text-paper transition-all duration-200 bg-charcoal font-lg rounded-2xl hover:bg-accent hover:shadow-glow hover:-translate-y-1 w-full md:w-auto"
-                                    >
-                                        <span className="mr-2">📖</span>
-                                        <span>{nextChapterSummary.name}</span>
-                                        <svg className="w-5 h-5 ml-2 -mr-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="text-subtle italic opacity-50">
-                                    <p>{t('library.endOfCollection')}</p>
-                                </div>
+                        <Virtuoso
+                            ref={readingVirtuosoRef}
+                            data={paragraphs}
+                            initialTopMostItemIndex={initialIndex}
+                            className="custom-scrollbar h-full"
+                            rangeChanged={({ startIndex }) => handleScrollIndex(startIndex)}
+                            increaseViewportBy={500}
+                            itemContent={(index, item) => (
+                                <article className="prose prose-lg md:prose-xl max-w-none font-serif leading-loose text-justify text-charcoal selection:bg-accent/20 dark:prose-invert">
+                                    {item.trim() ? <p className="mb-6 indent-8">{item}</p> : <br/>}
+                                </article>
                             )}
-                        </div>
+                            components={{
+                                Footer: () => (
+                                    <div className="mt-24 pt-12 border-t border-border text-center pb-32">
+                                        {nextChapterSummary ? (
+                                            <div>
+                                                <p className="text-subtle text-sm mb-4 uppercase tracking-widest font-bold">{t('library.continueReading')}</p>
+                                                <button 
+                                                    onClick={handleNextChapter}
+                                                    className="group relative inline-flex items-center justify-center px-8 py-5 font-serif font-bold text-paper transition-all duration-200 bg-charcoal font-lg rounded-2xl hover:bg-accent hover:shadow-glow hover:-translate-y-1 w-full md:w-auto"
+                                                >
+                                                    <span className="mr-2">📖</span>
+                                                    <span>{nextChapterSummary.name}</span>
+                                                    <svg className="w-5 h-5 ml-2 -mr-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="text-subtle italic opacity-50">
+                                                <p>{t('library.endOfCollection')}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }}
+                        />
                     )}
                 </div>
             </div>

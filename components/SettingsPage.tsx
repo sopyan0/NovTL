@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { AppSettings, GlossaryItem, NovelProject } from '../types';
 import { LLM_PROVIDERS, PROVIDER_MODELS, DEFAULT_MODELS } from '../constants'; 
 import ConfirmDialog from './ConfirmDialog'; 
@@ -19,6 +20,7 @@ const API_KEY_LINKS: Record<string, string> = {
 const SettingsPage: React.FC = () => {
   const { settings, updateSettings, updateProject, activeProject } = useSettings();
   const { language, setLanguage, t } = useLanguage();
+  const portalRoot = document.getElementById('portal-root');
 
   const [newWord, setNewWord] = useState('');
   const [newTrans, setNewTrans] = useState('');
@@ -225,16 +227,27 @@ const SettingsPage: React.FC = () => {
                     <button onClick={() => setLanguage('en')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${language === 'en' ? 'bg-charcoal text-paper shadow-md' : 'text-subtle'}`}>EN</button>
                     <button onClick={() => setLanguage('id')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${language === 'id' ? 'bg-charcoal text-paper shadow-md' : 'text-subtle'}`}>ID</button>
                 </div>
-                {!isCreatingProject ? (
-                    <button onClick={() => setIsCreatingProject(true)} className="bg-charcoal text-paper px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all whitespace-nowrap">{t('settings.project.new')}</button>
-                ) : (
-                    <div className="flex flex-col sm:flex-row gap-2 w-full">
-                        <input type="text" placeholder={t('settings.project.placeholder')} className="p-2.5 rounded-xl bg-card text-charcoal text-sm border-2 border-accent outline-none flex-grow min-w-0" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} autoFocus />
-                        <div className="flex gap-2">
-                            <button onClick={handleCreateProject} className="bg-accent px-4 py-2 rounded-xl text-white text-xs font-bold flex-1 sm:flex-none shadow-glow">{t('common.ok')}</button>
-                            <button onClick={() => setIsCreatingProject(false)} className="bg-gray-200 text-charcoal px-4 py-2 rounded-xl text-xs font-bold flex-1 sm:flex-none">{t('common.cancel')}</button>
+                <button onClick={() => setIsCreatingProject(true)} className="bg-charcoal text-paper px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all whitespace-nowrap">{t('settings.project.new')}</button>
+                
+                {isCreatingProject && portalRoot && ReactDOM.createPortal(
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-paper w-full max-w-sm rounded-3xl shadow-2xl p-6 space-y-4 relative">
+                            <h3 className="text-lg font-bold text-charcoal">{t('settings.project.new')}</h3>
+                            <input 
+                                type="text" 
+                                placeholder={t('settings.project.placeholder')} 
+                                className="w-full p-3 rounded-xl bg-card text-charcoal text-sm border-2 border-accent outline-none" 
+                                value={newProjectName} 
+                                onChange={e => setNewProjectName(e.target.value)} 
+                                autoFocus 
+                            />
+                            <div className="flex gap-2 pt-2">
+                                <button onClick={() => setIsCreatingProject(false)} className="flex-1 bg-gray-200 text-charcoal px-4 py-3 rounded-xl text-sm font-bold hover:bg-gray-300 transition-colors">{t('common.cancel')}</button>
+                                <button onClick={handleCreateProject} className="flex-1 bg-accent text-white px-4 py-3 rounded-xl text-sm font-bold shadow-glow hover:bg-accent/90 transition-colors">{t('common.ok')}</button>
+                            </div>
                         </div>
-                    </div>
+                    </div>,
+                    portalRoot
                 )}
             </div>
         </div>
