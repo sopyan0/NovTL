@@ -383,8 +383,8 @@ export const TRANSLATIONS = {
         step1Desc: "Tarik file .txt atau .epub ke editor, atau tempel teks secara manual.",
         step2: "Atur Gaya",
         step2Desc: "Gunakan tombol 'Prompt' untuk mengatur gaya bahasa (misal: 'Bahasa Novel Populer').",
-        step3: "Glosarium",
-        step3Desc: "Tambah nama karakter/istilah di Setelan agar AI tidak salah menerjemahkan.",
+        step3: "Terjemah Batch (Baru!)",
+        step3Desc: "Buka EPUB, klik 'Batch Mode', pilih banyak bab, dan terjemahkan semuanya di latar belakang sambil Anda membaca.",
         step4: "Terjemah & Simpan",
         step4Desc: "Klik 'Simpan' untuk menyimpan bab. Sistem otomatis mendeteksi nomor bab selanjutnya (Auto-Increment) agar tidak menimpa bab lama."
       },
@@ -398,9 +398,9 @@ export const TRANSLATIONS = {
       glossary: {
         title: "Menguasai Glosarium",
         desc: "Glosarium memastikan AI tetap konsisten. AI tidak akan lupa nama karakter atau jurus yang sudah Anda tetapkan.",
-        step1: "Manual: Buka Setelan, ketik kata asli dan terjemahannya, lalu klik Tambah.",
-        step2: "Asisten AI: Chat dengan Danggo dan katakan 'Tambahkan istilah X sebagai Y ke glosarium'.",
-        step3: "Kekuatan Utama: AI NovTL diprogram untuk SELALU memprioritaskan glosarium Anda di atas pengetahuannya sendiri."
+        step1: "Ekstrak Otomatis: Setelah menerjemahkan, klik tombol 'Extract' (🔍) agar AI mencari istilah penting untuk Anda.",
+        step2: "Ekstrak Batch: Di Mode Batch, centang 'Otomatis Ekstrak Glosarium' untuk mencari istilah dari banyak bab sekaligus.",
+        step3: "Manual: Buka Setelan, ketik kata asli dan terjemahannya, lalu klik Tambah."
       },
       storage: {
         title: "Di mana file saya disimpan?",
@@ -416,7 +416,9 @@ export const TRANSLATIONS = {
         q2: "Bisa baca offline?",
         a2: "Bisa! Setelah bab disimpan, Anda bisa membacanya tanpa koneksi internet.",
         q3: "Cara baca di aplikasi lain?",
-        a3: "Gunakan tombol 'Download EPUB' untuk dibuka di Google Play Books atau Moon+ Reader."
+        a3: "Gunakan tombol 'Download EPUB' untuk dibuka di Google Play Books atau Moon+ Reader.",
+        q4: "Bisa terjemah di latar belakang?",
+        a4: "Bisa! Gunakan Batch Mode untuk EPUB. Anda bisa menyembunyikan jendela proses dan lanjut membaca."
       }
     }
   }
