@@ -22,13 +22,13 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
+    - name: Build React App
+      run: npm run build
+
     - name: Sync Capacitor
       run: |
         npx cap add android || true
         npx cap sync android
-
-    - name: Build React App
-      run: npm run build
 
     # --- LANGKAH SAKTI: INJECT PERMISSIONS (VERSI STABIL) ---
     - name: Inject Android Permissions & Legacy Storage
