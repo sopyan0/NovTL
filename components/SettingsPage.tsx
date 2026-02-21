@@ -227,14 +227,31 @@ const SettingsPage: React.FC = () => {
               const text = e.target?.result as string;
               const data = JSON.parse(text);
               const newProjectId = crypto.randomUUID();
-              const importedProject = { ...data.project, id: newProjectId, name: `${data.project.name} (Restored)` };
+              
+              // Ensure glossary has new IDs too if needed, but usually they are embedded
+              const newGlossary = (data.project.glossary || []).map((g: any) => ({ ...g, id: crypto.randomUUID() }));
+
+              const importedProject = { 
+                  ...data.project, 
+                  id: newProjectId, 
+                  name: `${data.project.name} (Restored)`,
+                  glossary: newGlossary
+              };
+
+              // Update State (triggers DB save for Project)
               updateSettings(prev => ({ ...prev, projects: [...prev.projects, importedProject], activeProjectId: newProjectId }));
-              await saveGlossaryToDB(newProjectId, importedProject.glossary);
+              
+              // Save Translations with NEW IDs to avoid Unique Constraint errors
               for (const t of data.translations) {
-                  await saveTranslationToDB({ ...t, projectId: newProjectId });
+                  await saveTranslationToDB({ 
+                      ...t, 
+                      id: crypto.randomUUID(), // CRITICAL: Generate new ID
+                      projectId: newProjectId 
+                  });
               }
               alert(t('settings.storage.successImport'));
           } catch (err) {
+              console.error("Import failed:", err);
               alert(t('settings.storage.failImport'));
           } finally {
               if (fileInputRef.current) fileInputRef.current.value = '';

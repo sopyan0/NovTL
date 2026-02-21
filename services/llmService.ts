@@ -497,6 +497,113 @@ const openAITools = [
     }
 ];
 
+// --- CHAT WITH ASSISTANT (STREAMING) ---
+export const chatWithAssistantStream = async (
+    userMessage: string, 
+    settings: AppSettings, 
+    project: NovelProject,
+    history: ChatMessage[],
+    onChunk: (text: string) => void,
+    editorContext?: Pick<EditorContextType, 'sourceText' | 'translatedText'>,
+    language: 'en' | 'id' = 'id',
+    forceFullContext: boolean = false 
+): Promise<AssistantAction> => {
+  const userLower = userMessage.toLowerCase().trim();
+  if (['reset', 'clear'].includes(userLower)) {
+      const msg = language === 'en' ? "Danggo's memory cleared! 🍡" : "Memori Danggo sudah dibersihkan! 🍡";
+      return { type: 'CLEAR_CHAT', message: msg };
+  }
+
+  const config = getAIClientConfig(settings);
+  if (!config.apiKey) throw new Error(`API Key for ${config.provider} not found.`);
+
+  const glossary = project.glossary || [];
+  const glossarySummary = glossary.length > 500
+    ? glossary.slice(0, 500).map(g => `${g.original}(${g.translated})`).join(", ") + `... (+${glossary.length - 500} others)`
+    : glossary.map(g => `${g.original}(${g.translated})`).join(", ") || (language === 'en' ? "Glossary empty." : "Glosarium kosong.");
+
+  let contextInjection = "";
+  if (editorContext) {
+      if (forceFullContext) {
+          contextInjection = `\n[FULL EDITOR CONTENT]\nSOURCE:\n${editorContext.sourceText}\n\nTRANSLATION:\n${editorContext.translatedText}\n`;
+      } else {
+          contextInjection = `\n[EDITOR DRAFT - CURRENTLY EDITING]\nNOTE: Teks ini adalah Draft aktif yang sedang dikerjakan user di Editor. INI BUKAN DARI LIBRARY.\nSOURCE SNIPPET:\n${getSmartSnippet(editorContext.sourceText, 1000)}\n\nTRANSLATION SNIPPET:\n${getSmartSnippet(editorContext.translatedText, 1000)}\n`;
+      }
+  }
+
+  const systemPromptID = `Kamu adalah Danggo🍡, Asisten Novel.
+    
+    KONTEKS GLOSARIUM SAAT INI: [${glossarySummary}]
+    
+    PERATURAN PENTING:
+    1. Anda bisa melihat teks di 'EDITOR DRAFT'.
+    2. Jika user bertanya "cari tentang X", gunakan tool 'read_historical_content'.
+    3. Jika user bertanya tentang kata spesifik yang TIDAK ada di snippet, JANGAN MENGARANG. Katakan: "Saya tidak melihat teks tersebut di potongan yang saya baca. Bisa tolong copy-paste bagian itu?"
+    4. CEK GLOSARIUM DI ATAS DULU sebelum menyarankan penambahan kata.
+    5. HANYA panggil tool jika ada instruksi EKSPLESIT.`;
+
+  const systemPromptEN = `You are Danggo🍡, a Novel Assistant.
+    
+    CURRENT GLOSSARY CONTEXT: [${glossarySummary}]
+    
+    IMPORTANT RULES:
+    1. You can see the 'EDITOR DRAFT'.
+    2. If user asks to "search for X", use 'read_historical_content' tool.
+    3. If user asks about specific text NOT in the snippet, DO NOT HALLUCINATE. Say: "I cannot see that text in my current snippet. Could you copy-paste it for me?"
+    4. CHECK THE GLOSSARY ABOVE FIRST before suggesting additions.
+    5. ONLY use tools if explicitly asked.`;
+
+  const systemPrompt = language === 'en' ? systemPromptEN : systemPromptID;
+  const finalUserMessage = `${userMessage}\n\n${contextInjection}`;
+
+  // --- GEMINI STREAMING ---
+  if (config.provider === 'Gemini') {
+    try {
+      const historyContent = history.filter(m => !m.isHidden).map(m => ({ 
+        role: m.role === 'model' ? 'model' as const : 'user' as const, 
+        parts: [{ text: m.text.slice(0, 500) }] 
+      })).slice(-6);
+
+      const ai = new GoogleGenAI({ apiKey: config.apiKey });
+      const model = ai.getGenerativeModel({
+        model: config.model,
+        systemInstruction: systemPrompt,
+        tools: [{ functionDeclarations: [glossaryToolGemini, memoryToolGemini, readFullContentToolGemini] }],
+        generationConfig: { temperature: 0.4 }
+      });
+
+      const chat = model.startChat({ history: historyContent });
+      const result = await chat.sendMessageStream(finalUserMessage);
+
+      let fullText = '';
+      for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          if (chunkText) {
+              fullText += chunkText;
+              onChunk(chunkText);
+          }
+      }
+
+      const response = await result.response;
+      const fc = response.functionCalls()?.[0];
+      
+      if (fc) return handleToolCall(fc.name, fc.args, settings.activeProjectId, language);
+      return { type: 'NONE', message: fullText || (language === 'en' ? "Ready!" : "Siap membantu!") };
+
+    } catch (err: any) {
+        throw new Error(mapAIError(err));
+    }
+  } 
+  
+  // --- FALLBACK FOR OTHERS (NON-STREAMING FOR NOW, BUT SIMULATED) ---
+  else {
+      // Reuse existing logic but call onChunk at the end
+      const result = await chatWithAssistant(userMessage, settings, project, history, editorContext, language, forceFullContext);
+      if (result.message) onChunk(result.message);
+      return result;
+  }
+};
+
 export const chatWithAssistant = async (
     userMessage: string, 
     settings: AppSettings, 

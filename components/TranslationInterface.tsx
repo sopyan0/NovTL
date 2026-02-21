@@ -20,6 +20,7 @@ import { generateId } from '../utils/id';
 import { parseEpub, loadChapterText } from '../utils/epubParser';
 import { dbService } from '../services/DatabaseService';
 import { isCapacitorNative, isElectron } from '../utils/fileSystem';
+import { idb } from '../services/IndexedDBService';
 
 // TOAST COMPONENT
 const Toast: React.FC<{ message: string; show: boolean; onClose: () => void }> = ({ message, show, onClose }) => {
@@ -206,11 +207,25 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   // PERSISTENCE LOGIC: EPUB RECOVERY
   useEffect(() => {
     const recoverEpub = async () => {
-        const savedEpub = await dbService.getAppState('active_epub_file');
-        if (savedEpub && savedEpub.blob) {
-            const zip = new JSZip();
-            const loadedZipContent = await zip.loadAsync(savedEpub.blob);
-            setLoadedZip(loadedZipContent);
+        try {
+            // REVISI: Gunakan IndexedDB untuk file besar (Blob) agar tidak hilang/corrupt
+            const blob = await idb.getFile('active_epub_file');
+            if (blob) {
+                const zip = new JSZip();
+                const loadedZipContent = await zip.loadAsync(blob);
+                setLoadedZip(loadedZipContent);
+                console.log("EPUB recovered from IndexedDB");
+            } else {
+                // Fallback cek SQLite (Legacy support)
+                const savedEpub = await dbService.getAppState('active_epub_file');
+                if (savedEpub && savedEpub.blob) {
+                    const zip = new JSZip();
+                    const loadedZipContent = await zip.loadAsync(savedEpub.blob);
+                    setLoadedZip(loadedZipContent);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to recover EPUB:", e);
         }
     };
     if (epubChapters.length > 0 && !loadedZip) {
@@ -310,7 +325,11 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             const { chapters } = await parseEpub(file);
             setEpubChapters(chapters);
             
-            await dbService.saveAppState('active_epub_file', { id: 'active_epub_file', blob: file });
+            // REVISI: Simpan ke IndexedDB (lebih reliable untuk Blob besar)
+            await idb.saveFile('active_epub_file', file);
+            
+            // Hapus backup lama di SQLite jika ada untuk hemat ruang
+            await dbService.deleteAppState('active_epub_file');
             
             setIsEpubModalOpen(true);
             showToastNotification(`${t('editor.epubLoaded')} (${chapters.length})`);
@@ -392,6 +411,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setLoadedZip(null);
       setActiveChapterId(null);
       setIsEpubModalOpen(false);
+      await idb.deleteFile('active_epub_file');
       await dbService.deleteAppState('active_epub_file');
       await dbService.deleteAppState('active_epub_metadata');
   };

@@ -18,7 +18,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 const ITEMS_PER_PAGE = 12;
 
-const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9 \-_]/gi, '_').trim();
+const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9\-_]/gi, '_').replace(/_+/g, '_').trim();
 
 export default function SavedTranslationsPage() {
   const { settings } = useSettings();
@@ -51,6 +51,7 @@ export default function SavedTranslationsPage() {
   const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState(false);
 
   const readingContainerRef = useRef<HTMLDivElement>(null);
+  const readingScrollIndexRef = useRef(0); // Ref to track scroll position without re-rendering/saving
   const portalRoot = document.getElementById('portal-root');
 
   const activeProjectId = settings.activeProjectId;
@@ -251,6 +252,11 @@ export default function SavedTranslationsPage() {
         toggleSelectItem(summary.id);
         return;
     }
+    
+    // Initialize ref from storage
+    const savedPos = localStorage.getItem(`novtl_read_index_${summary.id}`);
+    readingScrollIndexRef.current = savedPos ? parseInt(savedPos, 10) : 0;
+
     await loadChapterContent(summary.id);
     setIsReadingFullScreen(true);
     document.body.style.overflow = 'hidden';
@@ -258,7 +264,8 @@ export default function SavedTranslationsPage() {
 
   const handleCloseReadingFullScreen = () => {
     if (currentReadingTranslation) {
-         // Cleanup if needed, but we persist index now
+         // Save scroll position ONLY on close
+         localStorage.setItem(`novtl_read_index_${currentReadingTranslation.id}`, readingScrollIndexRef.current.toString());
     }
     setIsEditingContent(false);
     setIsReadingFullScreen(false);
@@ -268,8 +275,15 @@ export default function SavedTranslationsPage() {
 
   const handleNextChapter = async () => {
       if (nextChapterSummary) {
+          // Save current chapter progress before switching
+          if (currentReadingTranslation) {
+              localStorage.setItem(`novtl_read_index_${currentReadingTranslation.id}`, readingScrollIndexRef.current.toString());
+          }
+
           // Reset scroll for new chapter
           localStorage.removeItem(`novtl_read_index_${nextChapterSummary.id}`);
+          readingScrollIndexRef.current = 0;
+          
           await loadChapterContent(nextChapterSummary.id);
       }
   };
@@ -320,8 +334,8 @@ export default function SavedTranslationsPage() {
       }, []);
 
       const handleScrollIndex = (index: number) => {
-          if (!currentReadingTranslation) return;
-          localStorage.setItem(`novtl_read_index_${currentReadingTranslation.id}`, index.toString());
+          // Update Ref ONLY (No Storage Write = No Lag)
+          readingScrollIndexRef.current = index;
       };
 
       const paragraphs = useMemo(() => {

@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { ChatMessage, PendingAction, AddGlossaryPayload, DeleteGlossaryPayload, GlossaryActionType } from '../types';
-import { chatWithAssistant, hasValidApiKey } from '../services/llmService';
+import { chatWithAssistant, chatWithAssistantStream, hasValidApiKey } from '../services/llmService';
 import { generateId } from '../utils/id';
 import { useSettings } from './SettingsContext';
 import { useEditor } from './EditorContext';
@@ -239,16 +239,51 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setIsTyping(true);
 
+    // Placeholder Message ID
+    const aiMsgId = generateId();
+    const aiPlaceholder: ChatMessage = {
+        id: aiMsgId,
+        role: 'model',
+        text: '', // Start empty for streaming
+        timestamp: Date.now()
+    };
+    addMessage(aiPlaceholder);
+
     try {
-        const result = await chatWithAssistant(
+        let accumulatedText = '';
+
+        const result = await chatWithAssistantStream(
             textToSend, 
             settings, 
             activeProject, 
-            messagesRef.current,
+            messagesRef.current.slice(0, -1), // Exclude the placeholder we just added
+            (chunk) => {
+                accumulatedText += chunk;
+                setMessages(prev => prev.map(m => 
+                    m.id === aiMsgId ? { ...m, text: accumulatedText } : m
+                ));
+            },
             { sourceText: sourceText, translatedText: translatedText }, 
             settings.appLanguage || 'id',
             forceFullContext 
         );
+
+        // Update final message with full text (ensure consistency)
+        // If result.message differs (e.g. tool call result), append it or replace?
+        // Usually result.message contains the text if type is NONE.
+        // If type is NOT NONE (Tool Call), result.message is the confirmation prompt.
+        
+        if (result.type !== 'NONE') {
+            // Tool call happened. The stream might have been empty or partial.
+            // We should update the message with the tool confirmation text.
+            accumulatedText += (accumulatedText ? '\n\n' : '') + result.message;
+            setMessages(prev => prev.map(m => 
+                m.id === aiMsgId ? { ...m, text: accumulatedText } : m
+            ));
+        }
+
+        // Save to DB
+        await saveChatToDB({ ...aiPlaceholder, text: accumulatedText });
 
         if (result.type === 'CLEAR_CHAT') {
             clearChat();
@@ -262,8 +297,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (result.type === 'READ_SAVED_TRANSLATION') {
             const query = result.payload.toLowerCase().trim();
-            
-            // OPTIMIZED SQL SEARCH (Memakai searchTranslations alih-alih meload semua)
             const matchedTranslations = await searchTranslations(settings.activeProjectId, query);
 
             let relevantContext = "";
@@ -276,13 +309,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                  await processUserMessage(dataInjection, true, recursionDepth + 1);
             } else {
                 const notFoundMsg = isEnglish ? "Not found in library." : "Tidak ditemukan di koleksi tersimpan.";
-                addMessage({ id: generateId(), role: 'model', text: notFoundMsg, timestamp: Date.now() });
+                // Append not found message
+                const finalMsg = accumulatedText + '\n\n' + notFoundMsg;
+                setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, text: finalMsg } : m));
+                await saveChatToDB({ ...aiPlaceholder, text: finalMsg });
             }
             return;
         }
 
         let pendingAction: PendingAction | undefined;
-        let finalMessage = result.message;
 
         if (result.type === 'ADD_GLOSSARY') {
             const existingOrignals = new Set(activeProject.glossary.map(g => g.original.toLowerCase().trim()));
@@ -291,14 +326,23 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (validItems.length > 0) {
                 pendingAction = { type: 'ADD_GLOSSARY', payload: validItems };
                 if (validItems.length < result.payload.length) {
-                    finalMessage += isEnglish 
+                    const extraMsg = isEnglish 
                         ? "\n(Some duplicates were automatically removed)" 
                         : "\n(Beberapa kata duplikat otomatis dibuang)";
+                    
+                    setMessages(prev => prev.map(m => 
+                        m.id === aiMsgId ? { ...m, text: m.text + extraMsg } : m
+                    ));
+                    accumulatedText += extraMsg;
                 }
             } else {
-                finalMessage = isEnglish 
-                    ? "✨ All these words are already in your glossary! No changes needed." 
-                    : "✨ Wah, semua kata tersebut ternyata sudah ada di glosarium Kakak! Tidak ada yang perlu ditambahkan.";
+                const extraMsg = isEnglish 
+                    ? "\n✨ All these words are already in your glossary! No changes needed." 
+                    : "\n✨ Wah, semua kata tersebut ternyata sudah ada di glosarium Kakak! Tidak ada yang perlu ditambahkan.";
+                setMessages(prev => prev.map(m => 
+                    m.id === aiMsgId ? { ...m, text: m.text + extraMsg } : m
+                ));
+                accumulatedText += extraMsg;
             }
         } 
         else if (result.type === 'DELETE_GLOSSARY') {
@@ -311,20 +355,29 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (verifiedPayload.length > 0) {
                 pendingAction = { type: 'DELETE_GLOSSARY', payload: verifiedPayload };
             } else {
-                 finalMessage = isEnglish ? "Terms not found in glossary." : "Kata tidak ditemukan di glosarium.";
+                 const extraMsg = isEnglish ? "\nTerms not found in glossary." : "\nKata tidak ditemukan di glosarium.";
+                 setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, text: m.text + extraMsg } : m));
+                 accumulatedText += extraMsg;
             }
         }
 
-        addMessage({
-            id: generateId(),
-            role: 'model',
-            text: finalMessage,
-            pendingAction,
-            timestamp: Date.now()
-        });
+        if (pendingAction) {
+            setMessages(prev => prev.map(m => 
+                m.id === aiMsgId ? { ...m, pendingAction } : m
+            ));
+            // Update DB with pending action
+            await saveChatToDB({ ...aiPlaceholder, text: accumulatedText, pendingAction });
+        } else {
+            // Final save if no pending action (already saved text above, but good to ensure)
+             await saveChatToDB({ ...aiPlaceholder, text: accumulatedText });
+        }
 
     } catch (error: any) {
-        addMessage({ id: generateId(), role: 'model', text: `Error: ${error.message}`, timestamp: Date.now() });
+        const errorMsg = `Error: ${error.message}`;
+        setMessages(prev => prev.map(m => 
+            m.id === aiMsgId ? { ...m, text: errorMsg } : m
+        ));
+        await saveChatToDB({ ...aiPlaceholder, text: errorMsg });
     } finally {
         setIsTyping(false);
     }
