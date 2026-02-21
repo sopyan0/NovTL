@@ -84,36 +84,33 @@ export const fsDelete = async (filename: string): Promise<void> => {
 import { Share } from '@capacitor/share';
 
 export const triggerDownload = async (filename: string, blob: Blob) => {
-    // 1. ROBUST SANITIZATION
-    // Remove forbidden characters for Windows/Linux/macOS
+    // 1. ROBUST SANITIZATION (Point 4)
+    // Remove forbidden characters: < > : " / \ | ? *
     let safeFilename = filename
-        .replace(/[<>:"/\\|?*]/g, '_') // Forbidden Windows chars
+        .replace(/[<>:"/\\|?*]/g, '_') 
         .replace(/[\x00-\x1F\x7F]/g, '') // Control characters
         .replace(/^\.+/, '') // No leading dots
         .replace(/[ .]+$/, '') // No trailing spaces or dots
         .trim();
 
-    // Ensure extension is preserved if it was stripped
-    if (!safeFilename.includes('.') && filename.includes('.')) {
-        const ext = filename.split('.').pop();
-        if (ext) safeFilename += `.${ext}`;
+    // Ensure extension is preserved
+    const ext = filename.includes('.') ? `.${filename.split('.').pop()}` : '';
+    if (!safeFilename.endsWith(ext) && ext !== '.') {
+        safeFilename += ext;
     }
 
     // Truncate to avoid path length limits (safe limit ~150 chars)
     if (safeFilename.length > 150) {
-        const parts = safeFilename.split('.');
-        const ext = parts.length > 1 ? `.${parts.pop()}` : '';
-        safeFilename = parts.join('.').slice(0, 140) + ext;
+        const namePart = safeFilename.replace(ext, '');
+        safeFilename = namePart.slice(0, 140) + ext;
     }
 
     // Fallback for empty or invalid names
     if (!safeFilename || safeFilename === '.epub' || safeFilename === '.txt') {
-        const timestamp = Date.now();
-        const ext = filename.endsWith('.epub') ? '.epub' : '.txt';
-        safeFilename = `novtl_export_${timestamp}${ext}`;
+        safeFilename = `novtl_export_${Date.now()}${ext || '.txt'}`;
     }
 
-    // WEB Browser branch - Execute immediately
+    // 2. WEB FALLBACK (Point 5)
     if (!isElectron() && !isCapacitorNative()) {
         try {
             const url = URL.createObjectURL(blob);
@@ -123,7 +120,6 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
             document.body.appendChild(link);
             link.click();
             
-            // Cleanup
             setTimeout(() => {
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
@@ -154,9 +150,9 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 alert("Error saat menyimpan di Desktop.");
             }
         } 
+        // 3. CAPACITOR EXPORT (Point 2)
         else if (isCapacitorNative()) {
             try {
-                // Get settings to check preference
                 const { getSettings } = await import('./storage');
                 const settings = await getSettings();
                 
@@ -170,6 +166,7 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
 
                 const exportPath = `${folderPath}/${safeFilename}`; 
                 
+                // Note: writeFile with recursive: true handles folder creation (Point 3)
                 await Filesystem.writeFile({
                     path: exportPath,
                     data: base64data,
@@ -177,11 +174,16 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                     recursive: true
                 });
                 
-                alert(`✅ BERHASIL!\n\n📂 File disimpan di:\n${settings.storagePreference === 'documents' ? 'Internal/Documents' : 'Internal/Download'}/NovTL/${safeFilename}`);
+                const locationName = settings.storagePreference === 'documents' ? 'Documents' : 'Download';
+                alert(`✅ BERHASIL!\n\n📂 File disimpan di:\n${locationName}/NovTL/${safeFilename}`);
 
             } catch (e: any) {
                 console.warn("Download failed", e);
-                alert(`❌ Gagal menyimpan file: ${e.message}\n\nPastikan izin penyimpanan sudah diberikan di pengaturan HP.`);
+                // If ExternalStorage fails (common on Android 11+), suggest switching to Documents
+                const msg = e.message?.toLowerCase().includes('permission') 
+                    ? "Gagal akses folder Download. Coba ganti lokasi simpan ke 'Documents' di Pengaturan."
+                    : `Gagal menyimpan file: ${e.message}`;
+                alert(`❌ ${msg}`);
             }
         }
     };
@@ -196,8 +198,8 @@ export const initFileSystem = async () => {
                 await Filesystem.requestPermissions();
             }
 
-            // Init Folder Kerja (Private/App Scope) di Documents
-            // JANGAN MEMBUAT FOLDER DI EXTERNAL STORAGE SAAT INIT untuk menghindari permission error
+            // Init Folder Kerja (Private/App Scope) di Documents (Point 3)
+            // JANGAN MEMBUAT FOLDER DI EXTERNAL STORAGE SAAT INIT
             await Filesystem.mkdir({ path: 'NovTL', directory: Directory.Documents, recursive: true });
         } catch (e) {
             console.warn("Init FS Warning:", e);
