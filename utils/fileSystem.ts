@@ -82,6 +82,9 @@ export const fsDelete = async (filename: string): Promise<void> => {
  * FEATURE: DIRECT DOWNLOAD
  */
 export const triggerDownload = async (filename: string, blob: Blob) => {
+    // SANITIZE FILENAME: Replace invalid characters with underscore
+    const safeFilename = filename.replace(/[^a-z0-9\u00a0-\uffff\-_.]/gi, '_').replace(/_{2,}/g, '_');
+    
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     
@@ -90,7 +93,7 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
         
         if (isElectron()) {
             try {
-                const res = await window.novtlAPI!.saveToDownloads(filename, base64data);
+                const res = await window.novtlAPI!.saveToDownloads(safeFilename, base64data);
                 if (res.success) {
                     alert(`✅ File berhasil didownload!\n\n📂 Lokasi: ${res.path}`);
                 } else {
@@ -103,7 +106,7 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
         else if (isCapacitorNative()) {
             try {
                 // TRIK: Gunakan Directory.ExternalStorage tapi arahkan ke path "Download/NovTL/filename"
-                const exportPath = `Download/NovTL/${filename}`; 
+                const exportPath = `Download/NovTL/${safeFilename}`; 
                 
                 await Filesystem.writeFile({
                     path: exportPath,
@@ -112,7 +115,7 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                     recursive: true
                 });
 
-                alert(`✅ BERHASIL!\n\n📂 File disimpan di folder:\nDownload/NovTL/${filename}`);
+                alert(`✅ BERHASIL!\n\n📂 File disimpan di folder:\nDownload/NovTL/${safeFilename}`);
 
             } catch (e: any) {
                 console.error("Download Error (Primary)", e);
@@ -120,12 +123,12 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 // FALLBACK: Kalau ExternalStorage tetap ditolak, coba ke Documents/NovTL
                 try {
                     await Filesystem.writeFile({
-                        path: `NovTL/${filename}`,
+                        path: `NovTL/${safeFilename}`,
                         data: base64data,
                         directory: Directory.Documents, 
                         recursive: true
                     });
-                    alert(`⚠️ Folder Download terkunci sistem.\nFile disimpan di: Internal/Documents/NovTL/${filename}`);
+                    alert(`⚠️ Folder Download terkunci sistem.\nFile disimpan di: Internal/Documents/NovTL/${safeFilename}`);
                 } catch (err2: any) {
                     alert(`❌ Gagal menyimpan file: ${err2.message}`);
                 }
@@ -135,7 +138,7 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = filename;
+            link.download = safeFilename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

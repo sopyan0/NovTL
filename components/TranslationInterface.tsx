@@ -645,8 +645,25 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
                 // 3. Save
                 const freshId = generateId();
-                const chapterNumMatch = chapter.title.match(/Chapter\s+(\d+)/i) || chapter.title.match(/^(\d+)/);
-                const chapterNum = chapterNumMatch ? parseInt(chapterNumMatch[1]) : (epubChapters.findIndex(c => c.id === chapter.id) + 1);
+                
+                // Improved Chapter Number Parsing
+                let chapterNum = 0;
+                const titleLower = chapter.title.toLowerCase();
+                
+                // Try "Chapter X" or "Bab X"
+                const explicitMatch = titleLower.match(/(?:chapter|bab|episode|ch|vol)\.?\s*(\d+)/);
+                if (explicitMatch) {
+                    chapterNum = parseInt(explicitMatch[1], 10);
+                } else {
+                    // Try finding just a number at the start
+                    const startNumMatch = titleLower.match(/^(\d+)/);
+                    if (startNumMatch) {
+                        chapterNum = parseInt(startNumMatch[1], 10);
+                    } else {
+                        // Fallback to index-based numbering (1-based)
+                        chapterNum = epubChapters.findIndex(c => c.id === chapter.id) + 1;
+                    }
+                }
 
                 const newTranslation: SavedTranslation = {
                     id: freshId,
@@ -869,7 +886,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   };
 
   const handleSaveExtractedGlossary = async () => {
-      const toAdd = extractedGlossary.filter(g => g.selected).map(({ original, translated }) => ({ original, translated }));
+      const toAdd = extractedGlossary.filter(g => g.selected).map(({ original, translated }) => ({
+          id: generateId(), // Generate unique ID for each new item
+          original, 
+          translated 
+      }));
+      
       if (toAdd.length === 0) {
           setIsGlossarySidebarOpen(false);
           return;
@@ -891,6 +913,11 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       }
 
       const updatedGlossary = [...currentGlossary, ...uniqueToAdd];
+      
+      // Optimistic update
+      const updatedProject = { ...activeProject, glossary: updatedGlossary };
+      setActiveProject(updatedProject);
+      
       await updateProject(activeProject.id, { glossary: updatedGlossary });
       showToastNotification(`${uniqueToAdd.length} kata ditambahkan ke glosarium!`);
       setIsGlossarySidebarOpen(false);

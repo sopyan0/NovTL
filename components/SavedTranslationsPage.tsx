@@ -18,7 +18,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 
 const ITEMS_PER_PAGE = 12;
 
-const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9\-_]/gi, '_').replace(/_+/g, '_').trim();
+const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9\u00a0-\uffff\-_.]/gi, '_').replace(/_{2,}/g, '_').trim();
 
 export default function SavedTranslationsPage() {
   const { settings } = useSettings();
@@ -26,7 +26,8 @@ export default function SavedTranslationsPage() {
   
   const [localSummaries, setLocalSummaries] = useState<SavedTranslationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGeneratingEpub, setIsGeneratingEpub] = useState(false);
+  const [isDownloadingEpub, setIsDownloadingEpub] = useState(false);
+  const [isDownloadingTxt, setIsDownloadingTxt] = useState(false);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,11 +90,16 @@ export default function SavedTranslationsPage() {
         if (sortOrder === 'newest') return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
         // Logika Oldest: Urutkan berdasarkan angka bab atau waktu terlama
         if (sortOrder === 'oldest') {
-            if (a.chapterNumber && b.chapterNumber) {
+            // Prioritize chapter number if available
+            if (typeof a.chapterNumber === 'number' && typeof b.chapterNumber === 'number' && a.chapterNumber !== b.chapterNumber) {
                 return a.chapterNumber - b.chapterNumber;
             }
+            // Fallback to natural sort of names
             const res = collator.compare(a.name, b.name);
-            return res !== 0 ? res : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+            if (res !== 0) return res;
+            
+            // Finally fallback to timestamp
+            return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
         }
         if (sortOrder === 'a-z') return collator.compare(a.name, b.name);
         if (sortOrder === 'z-a') return collator.compare(b.name, a.name);
@@ -197,35 +203,37 @@ export default function SavedTranslationsPage() {
 
   const handleDownloadAllTxt = async () => {
     if (localSummaries.length === 0) return;
-    setIsGeneratingEpub(true);
+    setIsDownloadingTxt(true);
     try {
         const fullData = await getPreparedDataForDownload();
         const fileContent = fullData.map(item => {
             return `[${item.name}]\n${item.translatedText}\n\n========================================\n\n`;
         }).join('\n');
         const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-        const filename = `${projectName.replace(/\s+/g, '_')}_Export.txt`;
+        const safeProjectName = sanitizeFilename(projectName);
+        const filename = `${safeProjectName}_Export.txt`;
         await triggerDownload(filename, blob);
     } catch (e) {
         alert("Gagal menyiapkan download.");
     } finally {
-        setIsGeneratingEpub(false);
+        setIsDownloadingTxt(false);
     }
   };
 
   const handleDownloadEpub = async () => {
     if (!activeProject || localSummaries.length === 0) return;
-    setIsGeneratingEpub(true);
+    setIsDownloadingEpub(true);
     try {
         const fullData = await getPreparedDataForDownload();
         const { generateEpub } = await import('../utils/epubGenerator');
         const blob = await generateEpub(activeProject, fullData);
-        const filename = `${projectName.replace(/\s+/g, '_')}.epub`;
+        const safeProjectName = sanitizeFilename(projectName);
+        const filename = `${safeProjectName}.epub`;
         await triggerDownload(filename, blob);
     } catch (e) {
         alert("Gagal membuat EPUB.");
     } finally {
-        setIsGeneratingEpub(false);
+        setIsDownloadingEpub(false);
     }
   };
 
@@ -466,11 +474,11 @@ export default function SavedTranslationsPage() {
 
           <button
             onClick={handleDownloadEpub}
-            disabled={localSummaries.length === 0 || isLoading || isGeneratingEpub}
+            disabled={localSummaries.length === 0 || isLoading || isDownloadingEpub || isDownloadingTxt}
             className="px-5 py-3 bg-indigo-600 text-white border border-indigo-600 rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs md:text-sm flex items-center gap-2 shadow-lg shadow-indigo-200/20"
           >
             <span>
-                {isGeneratingEpub 
+                {isDownloadingEpub 
                     ? t('library.generating') 
                     : (selectedIds.size > 0 ? `EPUB (${selectedIds.size})` : t('library.downloadEpub'))
                 }
@@ -479,10 +487,10 @@ export default function SavedTranslationsPage() {
 
           <button
             onClick={handleDownloadAllTxt}
-            disabled={localSummaries.length === 0 || isLoading || isGeneratingEpub}
+            disabled={localSummaries.length === 0 || isLoading || isDownloadingEpub || isDownloadingTxt}
             className="px-5 py-3 bg-card text-charcoal border border-border rounded-xl font-bold hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50 text-xs md:text-sm flex items-center gap-2 shadow-sm"
           >
-            TXT {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+            {isDownloadingTxt ? 'Downloading...' : `TXT ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
           </button>
         </div>
       </div>
