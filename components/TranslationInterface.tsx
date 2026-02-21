@@ -769,8 +769,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       const updatedGlossary = [...currentGlossary, ...uniqueToAdd];
       
       // Optimistic update
-      const updatedProject = { ...activeProject, glossary: updatedGlossary };
-      setActiveProject(updatedProject);
+      // const updatedProject = { ...activeProject, glossary: updatedGlossary };
+      // setActiveProject(updatedProject); // REMOVED: Not available in context
       
       await updateProject(activeProject.id, { glossary: updatedGlossary });
       showToastNotification(`${uniqueToAdd.length} kata ditambahkan ke glosarium!`);
