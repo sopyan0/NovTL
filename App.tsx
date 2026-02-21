@@ -18,6 +18,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { AuthProvider } from './contexts/AuthContext'; 
 import { AuthGuard } from './components/AuthGuard'; 
+import { BatchTranslationProvider } from './contexts/BatchTranslationContext';
 import { ensureDbReady } from './utils/storage';
 import AIChatDrawer from './components/AIChatDrawer';
 import HelpModal from './components/HelpModal';
@@ -34,7 +35,9 @@ const AppProviders: React.FC<{children: React.ReactNode}> = ({ children }) => (
                 <SettingsProvider> 
                     <LanguageProvider>
                         <ChatProvider>
-                            {children}
+                            <BatchTranslationProvider>
+                                {children}
+                            </BatchTranslationProvider>
                         </ChatProvider>
                     </LanguageProvider>
                 </SettingsProvider>

@@ -266,7 +266,10 @@ export const translateTextStream = async (
     ? new RegExp(`(${glossaryKeys.map(escapeRegExp).join('|')})`, 'gi')
     : null;
 
-  const chunks = splitTextByParagraphs(text, 2500); 
+  // OPTIMIZATION: Reduced chunk size from 2500 to 1000 tokens (~3500 chars).
+  // This significantly improves "Time To First Token" (perceived speed) for slower models like Gemini Pro or DeepSeek,
+  // preventing the "loading lama banget" (very long loading) issue user reported.
+  const chunks = splitTextByParagraphs(text, 1000); 
   let fullText = "";
   let previousContextSource = ""; 
   

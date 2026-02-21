@@ -17,6 +17,7 @@ import { saveTranslationToDB, getTranslationSummariesByProjectId, getPreviousCha
 import { useSettings } from '../contexts/SettingsContext';
 import { useEditor } from '../contexts/EditorContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useBatchTranslation } from '../contexts/BatchTranslationContext';
 import { generateId } from '../utils/id';
 import { parseEpub, loadChapterText } from '../utils/epubParser';
 import { dbService } from '../services/DatabaseService';
@@ -850,7 +851,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                                 </label>
                             </div>
                             <button 
-                                onClick={handleBatchTranslate}
+                                onClick={startBatchTranslation}
                                 disabled={selectedBatchChapters.size === 0}
                                 className="w-full py-3 bg-charcoal text-paper rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-black transition-all"
                             >
