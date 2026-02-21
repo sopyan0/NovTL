@@ -151,6 +151,18 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     isRestoring
   } = useEditor();
   const { t } = useLanguage();
+  const { 
+      isBatchMode, setIsBatchMode,
+      isBatchTranslating,
+      batchProgress,
+      selectedBatchChapters, setSelectedBatchChapters, toggleBatchChapter,
+      isBatchComplete, setIsBatchComplete,
+      batchExtractionResult, setBatchExtractionResult,
+      autoExtractBatch, setAutoExtractBatch,
+      loadedZip, setLoadedZip,
+      startBatchTranslation, stopBatchTranslation, resetBatch,
+      isEpubModalOpen, setIsEpubModalOpen
+  } = useBatchTranslation();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,8 +174,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [tempApiKey, setTempApiKey] = useState('');
   
-  const [isEpubModalOpen, setIsEpubModalOpen] = useState(false);
-  const [loadedZip, setLoadedZip] = useState<JSZip | null>(null);
+  // REMOVED LOCAL STATES: isEpubModalOpen, loadedZip
   
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -564,167 +575,9 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     );
   };
 
-// --- BATCH TRANSLATION LOGIC ---
-  const [isBatchMode, setIsBatchMode] = useState(false);
-  const [selectedBatchChapters, setSelectedBatchChapters] = useState<Set<string>>(new Set());
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; currentTitle: string }>({ current: 0, total: 0, currentTitle: '' });
-  const [isBatchTranslating, setIsBatchTranslating] = useState(false);
+  // --- BATCH TRANSLATION LOGIC ---
+  // Logic moved to BatchTranslationContext
 
-  const toggleBatchChapter = (id: string) => {
-      setSelectedBatchChapters(prev => {
-          const next = new Set(prev);
-          if (next.has(id)) next.delete(id);
-          else next.add(id);
-          return next;
-      });
-  };
-
-  const [isBatchComplete, setIsBatchComplete] = useState(false);
-  const [batchExtractionResult, setBatchExtractionResult] = useState<{original: string, translated: string, selected: boolean}[]>([]);
-  const [autoExtractBatch, setAutoExtractBatch] = useState(false);
-
-  const handleBatchTranslate = async () => {
-      if (selectedBatchChapters.size === 0) return;
-      
-      setIsBatchTranslating(true);
-      setIsBatchComplete(false);
-      setBatchExtractionResult([]);
-      setBatchProgress({ current: 0, total: selectedBatchChapters.size, currentTitle: '' });
-      abortControllerRef.current = new AbortController();
-      const currentSignal = abortControllerRef.current.signal;
-
-      const chaptersToTranslate = epubChapters.filter(c => selectedBatchChapters.has(c.id));
-      
-      // Sort by index to translate in order
-      const sortedChapters = chaptersToTranslate.sort((a, b) => {
-          const idxA = epubChapters.findIndex(c => c.id === a.id);
-          const idxB = epubChapters.findIndex(c => c.id === b.id);
-          return idxA - idxB;
-      });
-
-      // Background processing wrapper
-      (async () => {
-        try {
-            let allExtractedTerms: {original: string, translated: string}[] = [];
-            
-            // Check project validity before starting
-            if (!activeProject || !activeProject.id) {
-                throw new Error("Project ID invalid. Please refresh the page.");
-            }
-
-            for (let i = 0; i < sortedChapters.length; i++) {
-                if (currentSignal.aborted) {
-                    throw new Error('AbortedByUser');
-                }
-
-                const chapter = sortedChapters[i];
-                setBatchProgress(prev => ({ ...prev, current: i + 1, currentTitle: chapter.title }));
-                
-                // 1. Load Text
-                let sourceText = "";
-                if (loadedZip) {
-                    sourceText = await loadChapterText(loadedZip, chapter.href);
-                }
-                
-                if (!sourceText) continue;
-
-                // 2. Translate
-                let translatedText = "";
-                let batchBuffer = ""; 
-                
-                const previousContext = await getPreviousChapterContext(activeProject.id);
-
-                await translateTextStream(
-                    sourceText, settings, activeProject,
-                    (chunk) => { batchBuffer += chunk; },
-                    currentSignal,
-                    settings.translationMode || 'standard',
-                    previousContext,
-                    true // isBatch = true
-                );
-                translatedText = batchBuffer;
-
-                // 3. Save
-                const freshId = generateId();
-                
-                // Improved Chapter Number Parsing
-                let chapterNum = 0;
-                const titleLower = chapter.title.toLowerCase();
-                
-                // Try "Chapter X" or "Bab X"
-                const explicitMatch = titleLower.match(/(?:chapter|bab|episode|ch|vol)\.?\s*(\d+)/);
-                if (explicitMatch) {
-                    chapterNum = parseInt(explicitMatch[1], 10);
-                } else {
-                    // Try finding just a number at the start
-                    const startNumMatch = titleLower.match(/^(\d+)/);
-                    if (startNumMatch) {
-                        chapterNum = parseInt(startNumMatch[1], 10);
-                    } else {
-                        // Fallback to index-based numbering (1-based)
-                        chapterNum = epubChapters.findIndex(c => c.id === chapter.id) + 1;
-                    }
-                }
-
-                const newTranslation: SavedTranslation = {
-                    id: freshId,
-                    projectId: activeProject.id,
-                    name: chapter.title,
-                    chapterNumber: chapterNum,
-                    title: chapter.title,
-                    translatedText: translatedText,
-                    timestamp: new Date().toISOString(),
-                };
-                
-                // CRITICAL FIX: Ensure project exists before saving translation to avoid FOREIGN KEY error
-                try {
-                    await saveTranslationToDB(newTranslation);
-                    await saveProjectToDB(activeProject);
-                } catch (dbError: any) {
-                    console.error("DB Save Error:", dbError);
-                    await saveProjectToDB(activeProject);
-                    await saveTranslationToDB(newTranslation);
-                }
-
-                // 4. Auto Extract Glossary (if enabled)
-                if (autoExtractBatch) {
-                    try {
-                        const terms = await extractGlossaryFromText(sourceText, translatedText, settings, settings.appLanguage || 'id');
-                        allExtractedTerms = [...allExtractedTerms, ...terms];
-                    } catch (e) {
-                        console.error("Batch glossary extraction failed for chapter", chapter.title, e);
-                    }
-                }
-            }
-
-            // Process Extracted Terms
-            if (autoExtractBatch && allExtractedTerms.length > 0) {
-                const uniqueTerms = Array.from(new Map(allExtractedTerms.map(item => [item.original.toLowerCase(), item])).values());
-                const existing = new Set((activeProject.glossary || []).map(g => g.original.toLowerCase()));
-                const newItems = uniqueTerms.filter(r => !existing.has(r.original.toLowerCase())).map(r => ({ ...r, selected: true }));
-                setBatchExtractionResult(newItems);
-            }
-
-            setIsBatchComplete(true);
-            showToastNotification("Batch Translation Complete!");
-            
-            // Re-open modal if it was closed to show results
-            setIsEpubModalOpen(true);
-
-        } catch (e: any) {
-            console.error("Batch Task Error:", e);
-            if (e.message === 'AbortedByUser' || currentSignal.aborted) {
-                showToastNotification("Batch Translation Stopped.");
-            } else {
-                setError(`Batch Error: ${e.message}`);
-                setIsEpubModalOpen(true);
-            }
-        } finally {
-            setIsBatchTranslating(false);
-            abortControllerRef.current = null;
-        }
-      })();
-  };
 
   const handleReviewBatchGlossary = () => {
       setExtractedGlossary(batchExtractionResult);
