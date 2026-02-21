@@ -4,6 +4,7 @@
  * Copyright (c) 2025 NovTL Studio. All Rights Reserved.
  */
 
+import { GlossarySidebar } from './GlossarySidebar';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; 
 import ReactDOM from 'react-dom';
 import JSZip from 'jszip';
@@ -600,9 +601,16 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       (async () => {
         try {
             let allExtractedTerms: {original: string, translated: string}[] = [];
+            
+            // Check project validity before starting
+            if (!activeProject || !activeProject.id) {
+                throw new Error("Project ID invalid. Please refresh the page.");
+            }
 
             for (let i = 0; i < sortedChapters.length; i++) {
-                if (abortControllerRef.current?.signal.aborted) break;
+                if (abortControllerRef.current?.signal.aborted) {
+                    throw new Error('AbortedByUser');
+                }
 
                 const chapter = sortedChapters[i];
                 setBatchProgress({ current: i + 1, total: sortedChapters.length, currentTitle: chapter.title });
@@ -644,8 +652,22 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                     translatedText: translatedText,
                     timestamp: new Date().toISOString(),
                 };
-                await saveTranslationToDB(newTranslation);
-                await saveProjectToDB(activeProject);
+                
+                // CRITICAL FIX: Ensure project exists before saving translation to avoid FOREIGN KEY error
+                // We assume activeProject.id is valid, but we try-catch the save
+                try {
+                    await saveTranslationToDB(newTranslation);
+                    await saveProjectToDB(activeProject);
+                } catch (dbError: any) {
+                    console.error("DB Save Error:", dbError);
+                    if (dbError.message?.includes('FOREIGN KEY')) {
+                        // Attempt to re-save project first just in case
+                        await saveProjectToDB(activeProject);
+                        await saveTranslationToDB(newTranslation);
+                    } else {
+                        throw dbError;
+                    }
+                }
 
                 // 4. Auto Extract Glossary (if enabled)
                 if (autoExtractBatch) {
@@ -677,6 +699,8 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 showToastNotification("Batch Translation Stopped.");
             } else {
                 setError(`Batch Error: ${e.message}`);
+                // If we have a partial result, maybe show it?
+                setIsEpubModalOpen(true); // Re-open to show error
             }
         } finally {
             setIsBatchTranslating(false);
@@ -853,80 +877,42 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           return;
       }
       
-      const updatedGlossary = [...activeProject.glossary, ...toAdd];
+      // REVISI: Fetch latest project state to avoid overwriting
+      // Since we don't have a direct "getProject" method exposed here, we rely on activeProject
+      // But we should ensure we are appending to the current list in state
+      const currentGlossary = activeProject.glossary || [];
+      
+      // Deduplicate against existing
+      const existingKeys = new Set(currentGlossary.map(g => g.original.toLowerCase()));
+      const uniqueToAdd = toAdd.filter(item => !existingKeys.has(item.original.toLowerCase()));
+
+      if (uniqueToAdd.length === 0) {
+          showToastNotification("Semua istilah sudah ada di glosarium.");
+          setIsGlossarySidebarOpen(false);
+          return;
+      }
+
+      const updatedGlossary = [...currentGlossary, ...uniqueToAdd];
       await updateProject(activeProject.id, { glossary: updatedGlossary });
-      showToastNotification(`${toAdd.length} kata ditambahkan ke glosarium!`);
+      showToastNotification(`${uniqueToAdd.length} kata ditambahkan ke glosarium!`);
       setIsGlossarySidebarOpen(false);
       setExtractedGlossary([]);
   };
 
-  const GlossarySidebar = () => (
-      <div className={`fixed inset-y-0 right-0 w-80 bg-paper shadow-2xl z-[60] transform transition-transform duration-300 flex flex-col border-l border-border ${isGlossarySidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="p-4 border-b border-border bg-card flex justify-between items-center">
-              <h3 className="font-bold text-charcoal font-serif">Ekstrak Glosarium</h3>
-              <button onClick={() => setIsGlossarySidebarOpen(false)} className="p-1 hover:bg-gray-200 rounded-full">✕</button>
-          </div>
-          
-          <div className="flex-grow overflow-y-auto p-4 custom-scrollbar">
-              {isExtractingGlossary ? (
-                  <div className="flex flex-col items-center justify-center h-40 space-y-3">
-                      <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-xs text-subtle">Menganalisis teks...</span>
-                  </div>
-              ) : extractedGlossary.length === 0 ? (
-                  <div className="text-center text-subtle text-sm mt-10">Tidak ada istilah baru ditemukan.</div>
-              ) : (
-                  <div className="space-y-3">
-                      {extractedGlossary.map((item, idx) => (
-                          <div key={idx} className={`p-3 rounded-xl border transition-all ${item.selected ? 'bg-accent/5 border-accent' : 'bg-card border-border opacity-60'}`}>
-                              <div className="flex items-start gap-2">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={item.selected} 
-                                    onChange={() => setExtractedGlossary(prev => prev.map((p, i) => i === idx ? { ...p, selected: !p.selected } : p))}
-                                    className="mt-1"
-                                  />
-                                  <div className="flex-grow min-w-0">
-                                      <input 
-                                        value={item.original}
-                                        onChange={(e) => setExtractedGlossary(prev => prev.map((p, i) => i === idx ? { ...p, original: e.target.value } : p))}
-                                        className="w-full bg-transparent text-xs font-bold text-charcoal outline-none border-b border-transparent focus:border-accent mb-1"
-                                      />
-                                      <input 
-                                        value={item.translated}
-                                        onChange={(e) => setExtractedGlossary(prev => prev.map((p, i) => i === idx ? { ...p, translated: e.target.value } : p))}
-                                        className="w-full bg-transparent text-xs text-accent outline-none border-b border-transparent focus:border-accent"
-                                      />
-                                  </div>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              )}
-          </div>
-
-          <div className="p-4 border-t border-border bg-card space-y-2">
-              <button 
-                onClick={handleSaveExtractedGlossary}
-                disabled={isExtractingGlossary || extractedGlossary.filter(g => g.selected).length === 0}
-                className="w-full py-3 bg-accent text-white rounded-xl font-bold text-sm shadow-md hover:bg-accentHover disabled:opacity-50"
-              >
-                Simpan ({extractedGlossary.filter(g => g.selected).length})
-              </button>
-              <button 
-                onClick={() => setIsGlossarySidebarOpen(false)}
-                className="w-full py-3 bg-gray-100 text-charcoal rounded-xl font-bold text-sm hover:bg-gray-200"
-              >
-                Batal
-              </button>
-          </div>
-      </div>
-  );
+  // REMOVED INLINE GlossarySidebar COMPONENT
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
-      <GlossarySidebar />
+      <GlossarySidebar 
+        isOpen={isGlossarySidebarOpen}
+        onClose={() => setIsGlossarySidebarOpen(false)}
+        isExtracting={isExtractingGlossary}
+        extractedGlossary={extractedGlossary}
+        setExtractedGlossary={setExtractedGlossary}
+        onSave={handleSaveExtractedGlossary}
+      />
       <Toast message={toastMessage} show={showToast} onClose={() => setShowToast(false)} />
+      {/* ... rest of the JSX ... */}
       {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold text-sm animate-bounce">⚠️ {error}</div>}
       {isTranslationFullscreen && portalRoot && ReactDOM.createPortal(<ReadingModeModal />, portalRoot)}
       {isEpubModalOpen && <EpubChapterModal />}
