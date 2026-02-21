@@ -22,10 +22,6 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    # --- INJECT SAF PLUGIN SEBELUM BUILD ---
-    - name: Install SAF Plugin
-      run: npm install @capawesome/capacitor-file-picker
-
     - name: Sync Capacitor
       run: |
         npx cap add android || true
