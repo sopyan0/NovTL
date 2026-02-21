@@ -497,6 +497,39 @@ const openAITools = [
     }
 ];
 
+// --- GLOSSARY EXTRACTION ---
+export const extractGlossaryFromText = async (
+    sourceText: string,
+    translatedText: string,
+    settings: AppSettings,
+    language: 'en' | 'id' = 'id'
+): Promise<{ original: string; translated: string }[]> => {
+    const config = getAIClientConfig(settings);
+    if (!config.apiKey) throw new Error("API Key missing");
+
+    const prompt = language === 'en' 
+        ? `Analyze the following Source Text and Translated Text. Extract ALL proper nouns (Character Names, Locations, Techniques, Organizations, Items, Ranks) that are important for consistency.
+           Be thorough. If a term appears multiple times, it is likely important.
+           Return ONLY a JSON array of objects with "original" and "translated" keys.
+           Example: [{"original": "Yun Che", "translated": "Yun Che"}, {"original": "Frozen Cloud Asgard", "translated": "Istana Awan Beku"}]`
+        : `Analisis Teks Asli dan Terjemahan berikut. Ekstrak SEMUA kata benda khusus (Nama Karakter, Lokasi, Jurus, Organisasi, Item, Tingkatan) yang penting untuk konsistensi.
+           Jadilah teliti. Jika sebuah istilah muncul berkali-kali, kemungkinan besar itu penting.
+           Kembalikan HANYA array JSON berisi objek dengan key "original" dan "translated".
+           Contoh: [{"original": "Yun Che", "translated": "Yun Che"}, {"original": "Frozen Cloud Asgard", "translated": "Istana Awan Beku"}]`;
+
+    const content = `[SOURCE TEXT]\n${sourceText.slice(0, 3000)}\n\n[TRANSLATED TEXT]\n${translatedText.slice(0, 3000)}`;
+
+    try {
+        const result = await generateTextSimple(content, prompt, config);
+        // Clean markdown code blocks if present
+        const cleanJson = result.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanJson);
+    } catch (e) {
+        console.error("Glossary extraction failed:", e);
+        return [];
+    }
+};
+
 // --- CHAT WITH ASSISTANT (STREAMING) ---
 export const chatWithAssistantStream = async (
     userMessage: string, 

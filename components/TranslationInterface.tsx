@@ -10,7 +10,7 @@ import JSZip from 'jszip';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'; 
 import { Clipboard } from '@capacitor/clipboard';
 import { SavedTranslation, EpubChapter } from '../types'; 
-import { translateTextStream, hasValidApiKey } from '../services/llmService';
+import { translateTextStream, hasValidApiKey, extractGlossaryFromText } from '../services/llmService';
 import { LANGUAGES, DEFAULT_SETTINGS } from '../constants';
 import { saveTranslationToDB, getTranslationSummariesByProjectId, getPreviousChapterContext, saveProjectToDB } from '../utils/storage';
 import { useSettings } from '../contexts/SettingsContext';
@@ -559,39 +559,373 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
     );
   };
 
+// --- BATCH TRANSLATION LOGIC ---
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedBatchChapters, setSelectedBatchChapters] = useState<Set<string>>(new Set());
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; currentTitle: string }>({ current: 0, total: 0, currentTitle: '' });
+  const [isBatchTranslating, setIsBatchTranslating] = useState(false);
+
+  const toggleBatchChapter = (id: string) => {
+      setSelectedBatchChapters(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+      });
+  };
+
+  const [isBatchComplete, setIsBatchComplete] = useState(false);
+  const [batchExtractionResult, setBatchExtractionResult] = useState<{original: string, translated: string, selected: boolean}[]>([]);
+  const [autoExtractBatch, setAutoExtractBatch] = useState(false);
+
+  const handleBatchTranslate = async () => {
+      if (selectedBatchChapters.size === 0) return;
+      
+      setIsBatchTranslating(true);
+      setIsBatchComplete(false);
+      setBatchExtractionResult([]);
+      setBatchProgress({ current: 0, total: selectedBatchChapters.size, currentTitle: '' });
+      abortControllerRef.current = new AbortController();
+
+      const chaptersToTranslate = epubChapters.filter(c => selectedBatchChapters.has(c.id));
+      
+      // Sort by index to translate in order
+      const sortedChapters = chaptersToTranslate.sort((a, b) => {
+          const idxA = epubChapters.findIndex(c => c.id === a.id);
+          const idxB = epubChapters.findIndex(c => c.id === b.id);
+          return idxA - idxB;
+      });
+
+      // Background processing wrapper
+      (async () => {
+        try {
+            let allExtractedTerms: {original: string, translated: string}[] = [];
+
+            for (let i = 0; i < sortedChapters.length; i++) {
+                if (abortControllerRef.current?.signal.aborted) break;
+
+                const chapter = sortedChapters[i];
+                setBatchProgress({ current: i + 1, total: sortedChapters.length, currentTitle: chapter.title });
+                
+                // 1. Load Text
+                let sourceText = "";
+                if (loadedZip) {
+                    sourceText = await loadChapterText(loadedZip, chapter.href);
+                }
+                
+                if (!sourceText) continue;
+
+                // 2. Translate
+                let translatedText = "";
+                let batchBuffer = ""; 
+                
+                const previousContext = await getPreviousChapterContext(activeProject.id);
+
+                await translateTextStream(
+                    sourceText, settings, activeProject,
+                    (chunk) => { batchBuffer += chunk; },
+                    abortControllerRef.current.signal,
+                    settings.translationMode || 'standard',
+                    previousContext
+                );
+                translatedText = batchBuffer;
+
+                // 3. Save
+                const freshId = generateId();
+                const chapterNumMatch = chapter.title.match(/Chapter\s+(\d+)/i) || chapter.title.match(/^(\d+)/);
+                const chapterNum = chapterNumMatch ? parseInt(chapterNumMatch[1]) : (epubChapters.findIndex(c => c.id === chapter.id) + 1);
+
+                const newTranslation: SavedTranslation = {
+                    id: freshId,
+                    projectId: activeProject.id,
+                    name: chapter.title,
+                    chapterNumber: chapterNum,
+                    title: chapter.title,
+                    translatedText: translatedText,
+                    timestamp: new Date().toISOString(),
+                };
+                await saveTranslationToDB(newTranslation);
+                await saveProjectToDB(activeProject);
+
+                // 4. Auto Extract Glossary (if enabled)
+                if (autoExtractBatch) {
+                    try {
+                        const terms = await extractGlossaryFromText(sourceText, translatedText, settings, settings.appLanguage || 'id');
+                        allExtractedTerms = [...allExtractedTerms, ...terms];
+                    } catch (e) {
+                        console.error("Batch glossary extraction failed for chapter", chapter.title, e);
+                    }
+                }
+            }
+
+            // Process Extracted Terms
+            if (autoExtractBatch && allExtractedTerms.length > 0) {
+                const uniqueTerms = Array.from(new Map(allExtractedTerms.map(item => [item.original.toLowerCase(), item])).values());
+                const existing = new Set(activeProject.glossary.map(g => g.original.toLowerCase()));
+                const newItems = uniqueTerms.filter(r => !existing.has(r.original.toLowerCase())).map(r => ({ ...r, selected: true }));
+                setBatchExtractionResult(newItems);
+            }
+
+            setIsBatchComplete(true);
+            showToastNotification("Batch Translation Complete!");
+            
+            // Re-open modal if it was closed to show results
+            setIsEpubModalOpen(true);
+
+        } catch (e: any) {
+            if (e.message === 'AbortedByUser') {
+                showToastNotification("Batch Translation Stopped.");
+            } else {
+                setError(`Batch Error: ${e.message}`);
+            }
+        } finally {
+            setIsBatchTranslating(false);
+            // Do NOT reset isBatchMode or selectedBatchChapters here so user can see result
+            abortControllerRef.current = null;
+        }
+      })();
+  };
+
+  const handleReviewBatchGlossary = () => {
+      setExtractedGlossary(batchExtractionResult);
+      setIsGlossarySidebarOpen(true);
+      setIsEpubModalOpen(false); // Close batch modal to focus on glossary
+      setIsBatchComplete(false); // Reset complete state
+      setIsBatchMode(false);
+      setSelectedBatchChapters(new Set());
+  };
+
+  const handleCloseBatchComplete = () => {
+      setIsBatchComplete(false);
+      setIsBatchMode(false);
+      setSelectedBatchChapters(new Set());
+      setIsEpubModalOpen(false);
+  };
+
   const EpubChapterModal = () => (
     <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4 bg-charcoal/40 backdrop-blur-sm animate-in fade-in">
         <div className="bg-paper w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            {/* HEADER */}
             <div className="p-6 border-b border-border flex justify-between items-center bg-card">
                 <div>
-                    <h3 className="text-xl font-serif font-bold text-charcoal">Pilih Bab EPUB</h3>
-                    <p className="text-xs text-subtle mt-1">{epubChapters.length} bab terdeteksi.</p>
+                    <h3 className="text-xl font-serif font-bold text-charcoal">
+                        {isBatchTranslating ? 'Menerjemahkan...' : isBatchComplete ? 'Selesai!' : isBatchMode ? `Batch Translate (${selectedBatchChapters.size})` : 'Pilih Bab EPUB'}
+                    </h3>
+                    {!isBatchTranslating && !isBatchComplete && <p className="text-xs text-subtle mt-1">{epubChapters.length} bab terdeteksi.</p>}
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={resetEpub} className="text-red-500 text-xs font-bold px-2">{t('common.reset')}</button>
+                    {isBatchTranslating && (
+                        <button onClick={() => setIsEpubModalOpen(false)} className="text-xs font-bold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-charcoal">
+                            Sembunyikan
+                        </button>
+                    )}
+                    {!isBatchTranslating && !isBatchComplete && (
+                        <>
+                            <button onClick={() => setIsBatchMode(!isBatchMode)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${isBatchMode ? 'bg-accent text-white border-accent' : 'bg-card text-charcoal border-border'}`}>
+                                {isBatchMode ? 'Cancel Batch' : 'Batch Mode'}
+                            </button>
+                            {!isBatchMode && <button onClick={resetEpub} className="text-red-500 text-xs font-bold px-2">{t('common.reset')}</button>}
+                        </>
+                    )}
                     <button onClick={() => setIsEpubModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">✕</button>
                 </div>
             </div>
-            <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
-                {epubChapters.map((chapter, idx) => {
-                    const isActive = activeChapterId === chapter.id;
-                    return (
-                        <button key={idx} onClick={() => loadChapterToEditor(chapter)} className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center gap-3 group border ${isActive ? 'bg-accent text-white shadow-md border-accent' : 'hover:bg-gray-100 border-transparent'}`}>
-                            <span className={`text-xs font-bold px-2 py-1 rounded-md min-w-[2rem] text-center ${isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>{idx + 1}</span>
-                            <div className="flex-grow min-w-0">
-                                <span className={`font-serif text-sm truncate block ${isActive ? 'text-white font-bold' : 'text-charcoal'}`}>{chapter.title}</span>
-                                {isActive && <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full inline-block mt-1">Loaded</span>}
+            
+            {/* CONTENT */}
+            {isBatchTranslating ? (
+                <div className="flex-grow flex flex-col items-center justify-center p-8 text-center">
+                    <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <h4 className="text-lg font-bold text-charcoal mb-2">Menerjemahkan...</h4>
+                    <p className="text-sm text-subtle mb-4">{batchProgress.currentTitle}</p>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-2">
+                        <div className="bg-accent h-2.5 rounded-full transition-all duration-300" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}></div>
+                    </div>
+                    <p className="text-xs font-bold text-subtle">{batchProgress.current} / {batchProgress.total}</p>
+                    <button onClick={handleStop} className="mt-6 px-6 py-2 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200">Stop</button>
+                    <p className="text-[10px] text-subtle mt-4">Anda bisa menutup jendela ini, proses akan berjalan di latar belakang.</p>
+                </div>
+            ) : isBatchComplete ? (
+                <div className="flex-grow flex flex-col items-center justify-center p-8 text-center space-y-4">
+                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-3xl mb-2">✓</div>
+                    <h4 className="text-xl font-bold text-charcoal">Batch Translation Selesai!</h4>
+                    <p className="text-sm text-subtle">Berhasil menerjemahkan {batchProgress.total} bab.</p>
+                    
+                    {batchExtractionResult.length > 0 ? (
+                        <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 w-full">
+                            <p className="text-sm font-bold text-orange-800 mb-1">🔍 {batchExtractionResult.length} Istilah Baru Ditemukan</p>
+                            <p className="text-xs text-orange-600 mb-3">AI mendeteksi istilah yang mungkin perlu masuk glosarium.</p>
+                            <button onClick={handleReviewBatchGlossary} className="w-full py-2 bg-orange-200 text-orange-800 rounded-lg font-bold text-xs hover:bg-orange-300">
+                                Review Glosarium
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-subtle italic">Tidak ada istilah baru yang terdeteksi untuk glosarium.</p>
+                    )}
+
+                    <button onClick={handleCloseBatchComplete} className="px-8 py-3 bg-charcoal text-white rounded-xl font-bold shadow-lg hover:bg-black">
+                        Tutup
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <div className="flex-grow overflow-y-auto custom-scrollbar p-2">
+                        {epubChapters.map((chapter, idx) => {
+                            const isActive = activeChapterId === chapter.id;
+                            const isSelected = selectedBatchChapters.has(chapter.id);
+                            
+                            return (
+                                <button 
+                                    key={idx} 
+                                    onClick={() => isBatchMode ? toggleBatchChapter(chapter.id) : loadChapterToEditor(chapter)} 
+                                    className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center gap-3 group border ${
+                                        isBatchMode 
+                                            ? (isSelected ? 'bg-accent/10 border-accent' : 'hover:bg-gray-50 border-transparent')
+                                            : (isActive ? 'bg-accent text-white shadow-md border-accent' : 'hover:bg-gray-100 border-transparent')
+                                    }`}
+                                >
+                                    {isBatchMode && (
+                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-accent border-accent' : 'border-gray-300 bg-white'}`}>
+                                            {isSelected && <span className="text-white text-xs">✓</span>}
+                                        </div>
+                                    )}
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-md min-w-[2rem] text-center ${isActive && !isBatchMode ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>{idx + 1}</span>
+                                    <div className="flex-grow min-w-0">
+                                        <span className={`font-serif text-sm truncate block ${isActive && !isBatchMode ? 'text-white font-bold' : 'text-charcoal'}`}>{chapter.title}</span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {isBatchMode && (
+                        <div className="p-4 border-t border-border bg-card space-y-3">
+                            <div className="flex items-center gap-2 px-1">
+                                <input 
+                                    type="checkbox" 
+                                    id="autoExtractGlossary"
+                                    checked={autoExtractBatch}
+                                    onChange={(e) => setAutoExtractBatch(e.target.checked)}
+                                    className="w-4 h-4 text-accent rounded focus:ring-accent"
+                                />
+                                <label htmlFor="autoExtractGlossary" className="text-xs font-bold text-charcoal cursor-pointer select-none">
+                                    Otomatis Ekstrak Glosarium (AI Enhanced)
+                                </label>
                             </div>
-                        </button>
-                    );
-                })}
-            </div>
+                            <button 
+                                onClick={handleBatchTranslate}
+                                disabled={selectedBatchChapters.size === 0}
+                                className="w-full py-3 bg-charcoal text-paper rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-black transition-all"
+                            >
+                                Terjemahkan {selectedBatchChapters.size} Bab
+                            </button>
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     </div>
   );
 
+  const [isGlossarySidebarOpen, setIsGlossarySidebarOpen] = useState(false);
+  const [extractedGlossary, setExtractedGlossary] = useState<{original: string, translated: string, selected: boolean}[]>([]);
+  const [isExtractingGlossary, setIsExtractingGlossary] = useState(false);
+
+  const handleExtractGlossary = async () => {
+      if (!sourceText || !translatedText) return;
+      setIsGlossarySidebarOpen(true);
+      setIsExtractingGlossary(true);
+      try {
+          const results = await extractGlossaryFromText(sourceText, translatedText, settings, settings.appLanguage || 'id');
+          // Filter duplicates from existing glossary
+          const existing = new Set(activeProject.glossary.map(g => g.original.toLowerCase()));
+          const newItems = results.filter(r => !existing.has(r.original.toLowerCase())).map(r => ({ ...r, selected: true }));
+          setExtractedGlossary(newItems);
+      } catch (e) {
+          showToastNotification("Gagal mengekstrak glosarium.");
+      } finally {
+          setIsExtractingGlossary(false);
+      }
+  };
+
+  const handleSaveExtractedGlossary = async () => {
+      const toAdd = extractedGlossary.filter(g => g.selected).map(({ original, translated }) => ({ original, translated }));
+      if (toAdd.length === 0) {
+          setIsGlossarySidebarOpen(false);
+          return;
+      }
+      
+      const updatedGlossary = [...activeProject.glossary, ...toAdd];
+      await updateProject(activeProject.id, { glossary: updatedGlossary });
+      showToastNotification(`${toAdd.length} kata ditambahkan ke glosarium!`);
+      setIsGlossarySidebarOpen(false);
+      setExtractedGlossary([]);
+  };
+
+  const GlossarySidebar = () => (
+      <div className={`fixed inset-y-0 right-0 w-80 bg-paper shadow-2xl z-[60] transform transition-transform duration-300 flex flex-col border-l border-border ${isGlossarySidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-4 border-b border-border bg-card flex justify-between items-center">
+              <h3 className="font-bold text-charcoal font-serif">Ekstrak Glosarium</h3>
+              <button onClick={() => setIsGlossarySidebarOpen(false)} className="p-1 hover:bg-gray-200 rounded-full">✕</button>
+          </div>
+          
+          <div className="flex-grow overflow-y-auto p-4 custom-scrollbar">
+              {isExtractingGlossary ? (
+                  <div className="flex flex-col items-center justify-center h-40 space-y-3">
+                      <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-xs text-subtle">Menganalisis teks...</span>
+                  </div>
+              ) : extractedGlossary.length === 0 ? (
+                  <div className="text-center text-subtle text-sm mt-10">Tidak ada istilah baru ditemukan.</div>
+              ) : (
+                  <div className="space-y-3">
+                      {extractedGlossary.map((item, idx) => (
+                          <div key={idx} className={`p-3 rounded-xl border transition-all ${item.selected ? 'bg-accent/5 border-accent' : 'bg-card border-border opacity-60'}`}>
+                              <div className="flex items-start gap-2">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={item.selected} 
+                                    onChange={() => setExtractedGlossary(prev => prev.map((p, i) => i === idx ? { ...p, selected: !p.selected } : p))}
+                                    className="mt-1"
+                                  />
+                                  <div className="flex-grow min-w-0">
+                                      <input 
+                                        value={item.original}
+                                        onChange={(e) => setExtractedGlossary(prev => prev.map((p, i) => i === idx ? { ...p, original: e.target.value } : p))}
+                                        className="w-full bg-transparent text-xs font-bold text-charcoal outline-none border-b border-transparent focus:border-accent mb-1"
+                                      />
+                                      <input 
+                                        value={item.translated}
+                                        onChange={(e) => setExtractedGlossary(prev => prev.map((p, i) => i === idx ? { ...p, translated: e.target.value } : p))}
+                                        className="w-full bg-transparent text-xs text-accent outline-none border-b border-transparent focus:border-accent"
+                                      />
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              )}
+          </div>
+
+          <div className="p-4 border-t border-border bg-card space-y-2">
+              <button 
+                onClick={handleSaveExtractedGlossary}
+                disabled={isExtractingGlossary || extractedGlossary.filter(g => g.selected).length === 0}
+                className="w-full py-3 bg-accent text-white rounded-xl font-bold text-sm shadow-md hover:bg-accentHover disabled:opacity-50"
+              >
+                Simpan ({extractedGlossary.filter(g => g.selected).length})
+              </button>
+              <button 
+                onClick={() => setIsGlossarySidebarOpen(false)}
+                className="w-full py-3 bg-gray-100 text-charcoal rounded-xl font-bold text-sm hover:bg-gray-200"
+              >
+                Batal
+              </button>
+          </div>
+      </div>
+  );
+
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
+      <GlossarySidebar />
       <Toast message={toastMessage} show={showToast} onClose={() => setShowToast(false)} />
       {error && <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold text-sm animate-bounce">⚠️ {error}</div>}
       {isTranslationFullscreen && portalRoot && ReactDOM.createPortal(<ReadingModeModal />, portalRoot)}
@@ -766,6 +1100,16 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 <button disabled={!isLoading && !sourceText.trim()} onClick={handleTranslate} className={`flex-grow py-3.5 md:py-4 font-serif font-bold tracking-widest text-sm rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex justify-center items-center gap-2 ${isLoading ? 'bg-red-500 text-white' : 'bg-charcoal text-paper'}`}>
                     {isLoading ? t('editor.stop') : t('editor.translate')}
                 </button>
+                {translatedText && !isLoading && (
+                    <button 
+                        onClick={handleExtractGlossary}
+                        className="px-4 py-3.5 md:py-4 bg-orange-100 text-orange-700 rounded-xl font-bold text-sm shadow-sm hover:bg-orange-200 active:scale-95 transition-all flex items-center gap-2"
+                        title="Ekstrak Glosarium Otomatis"
+                    >
+                        <span>🔍</span>
+                        <span className="hidden md:inline">Extract</span>
+                    </button>
+                )}
                 <button 
                   disabled={isLoading || isSaving || !translatedText.trim()} 
                   onClick={handleInitiateSave} 
