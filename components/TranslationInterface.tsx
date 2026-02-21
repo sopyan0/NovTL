@@ -265,9 +265,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
   const handleStop = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
-      abortControllerRef.current = null;
       setIsLoading(false);
-      setError("Stopped by user.");
+      if (isBatchTranslating) {
+          showToastNotification("Menghentikan batch...");
+      } else {
+          setError("Berhenti oleh pengguna.");
+      }
     }
   };
 
@@ -587,6 +590,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
       setBatchExtractionResult([]);
       setBatchProgress({ current: 0, total: selectedBatchChapters.size, currentTitle: '' });
       abortControllerRef.current = new AbortController();
+      const currentSignal = abortControllerRef.current.signal;
 
       const chaptersToTranslate = epubChapters.filter(c => selectedBatchChapters.has(c.id));
       
@@ -608,12 +612,12 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             }
 
             for (let i = 0; i < sortedChapters.length; i++) {
-                if (abortControllerRef.current?.signal.aborted) {
+                if (currentSignal.aborted) {
                     throw new Error('AbortedByUser');
                 }
 
                 const chapter = sortedChapters[i];
-                setBatchProgress({ current: i + 1, total: sortedChapters.length, currentTitle: chapter.title });
+                setBatchProgress(prev => ({ ...prev, current: i + 1, currentTitle: chapter.title }));
                 
                 // 1. Load Text
                 let sourceText = "";
@@ -632,9 +636,10 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 await translateTextStream(
                     sourceText, settings, activeProject,
                     (chunk) => { batchBuffer += chunk; },
-                    abortControllerRef.current.signal,
+                    currentSignal,
                     settings.translationMode || 'standard',
-                    previousContext
+                    previousContext,
+                    true // isBatch = true
                 );
                 translatedText = batchBuffer;
 
@@ -654,19 +659,13 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
                 };
                 
                 // CRITICAL FIX: Ensure project exists before saving translation to avoid FOREIGN KEY error
-                // We assume activeProject.id is valid, but we try-catch the save
                 try {
                     await saveTranslationToDB(newTranslation);
                     await saveProjectToDB(activeProject);
                 } catch (dbError: any) {
                     console.error("DB Save Error:", dbError);
-                    if (dbError.message?.includes('FOREIGN KEY')) {
-                        // Attempt to re-save project first just in case
-                        await saveProjectToDB(activeProject);
-                        await saveTranslationToDB(newTranslation);
-                    } else {
-                        throw dbError;
-                    }
+                    await saveProjectToDB(activeProject);
+                    await saveTranslationToDB(newTranslation);
                 }
 
                 // 4. Auto Extract Glossary (if enabled)
@@ -683,7 +682,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             // Process Extracted Terms
             if (autoExtractBatch && allExtractedTerms.length > 0) {
                 const uniqueTerms = Array.from(new Map(allExtractedTerms.map(item => [item.original.toLowerCase(), item])).values());
-                const existing = new Set(activeProject.glossary.map(g => g.original.toLowerCase()));
+                const existing = new Set((activeProject.glossary || []).map(g => g.original.toLowerCase()));
                 const newItems = uniqueTerms.filter(r => !existing.has(r.original.toLowerCase())).map(r => ({ ...r, selected: true }));
                 setBatchExtractionResult(newItems);
             }
@@ -695,16 +694,15 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
             setIsEpubModalOpen(true);
 
         } catch (e: any) {
-            if (e.message === 'AbortedByUser') {
+            console.error("Batch Task Error:", e);
+            if (e.message === 'AbortedByUser' || currentSignal.aborted) {
                 showToastNotification("Batch Translation Stopped.");
             } else {
                 setError(`Batch Error: ${e.message}`);
-                // If we have a partial result, maybe show it?
-                setIsEpubModalOpen(true); // Re-open to show error
+                setIsEpubModalOpen(true);
             }
         } finally {
             setIsBatchTranslating(false);
-            // Do NOT reset isBatchMode or selectedBatchChapters here so user can see result
             abortControllerRef.current = null;
         }
       })();
@@ -903,6 +901,16 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
+      {/* Global Batch Progress Bar */}
+      {isBatchTranslating && (
+          <div className="fixed top-0 left-0 right-0 z-[100] h-1 bg-gray-200 dark:bg-gray-800">
+              <div 
+                className="h-full bg-accent transition-all duration-500 ease-out shadow-[0_0_10px_rgba(var(--accent-rgb),0.5)]" 
+                style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+              ></div>
+          </div>
+      )}
+      
       <GlossarySidebar 
         isOpen={isGlossarySidebarOpen}
         onClose={() => setIsGlossarySidebarOpen(false)}

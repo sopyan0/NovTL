@@ -250,7 +250,8 @@ export const translateTextStream = async (
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
   mode: 'standard' | 'high_quality' = 'standard',
-  previousChapterContext?: string
+  previousChapterContext?: string,
+  isBatch: boolean = false
 ): Promise<{ result: string, detectedLanguage: string | null }> => {
   const config = getAIClientConfig(settings);
   if (!config.apiKey) throw new Error(`API Key for ${config.provider} is missing.`);
@@ -398,7 +399,7 @@ export const translateTextStream = async (
       if (!success) throw new Error(mapAIError(lastError));
       if (!fullText.endsWith('\n\n')) { fullText += '\n\n'; onChunk('\n\n'); }
       previousContextSource = chunk;
-      if (index < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
+      if (!isBatch && index < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
   }
   return { result: fullText.trim(), detectedLanguage: null };
 };
