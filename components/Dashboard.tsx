@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Page } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { isCapacitorNative } from '../utils/fileSystem';
 
 interface DashboardProps {
     onNavigate: (page: Page) => void;
@@ -11,6 +12,19 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     const { settings, updateSettings, activeProject } = useSettings();
     const { t } = useLanguage();
+    const [showStorageModal, setShowStorageModal] = useState(false);
+
+    useEffect(() => {
+        // Show modal if on mobile and preference not set
+        if (isCapacitorNative() && !settings.storagePreference) {
+            setShowStorageModal(true);
+        }
+    }, [settings.storagePreference]);
+
+    const handleSelectStorage = (pref: 'downloads' | 'documents') => {
+        updateSettings({ storagePreference: pref });
+        setShowStorageModal(false);
+    };
 
     const totalProjects = settings.projects.length;
     // Calculate total glossary items across all projects
@@ -147,6 +161,57 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 </div>
 
             </div>
+
+            {/* STORAGE PREFERENCE MODAL */}
+            {showStorageModal && (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-charcoal/40 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-paper w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border border-white/20 animate-in zoom-in-95 duration-300">
+                        <div className="text-center space-y-4">
+                            <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <span className="text-4xl">📂</span>
+                            </div>
+                            <h2 className="text-2xl font-serif font-bold text-charcoal">Pilih Lokasi Simpan</h2>
+                            <p className="text-subtle leading-relaxed">
+                                Agar file hasil terjemahan (EPUB/TXT) bisa langsung masuk ke folder yang benar, silakan pilih lokasi penyimpanan utama Anda.
+                            </p>
+                            
+                            <div className="grid grid-cols-1 gap-4 mt-8">
+                                <button 
+                                    onClick={() => handleSelectStorage('downloads')}
+                                    className="flex items-center justify-between p-5 bg-white border-2 border-transparent hover:border-accent rounded-2xl shadow-sm transition-all group"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-2xl">📥</span>
+                                        <div className="text-left">
+                                            <p className="font-bold text-charcoal">Folder Download</p>
+                                            <p className="text-xs text-subtle">Internal/Download/NovTL</p>
+                                        </div>
+                                    </div>
+                                    <span className="opacity-0 group-hover:opacity-100 text-accent transition-opacity">➔</span>
+                                </button>
+
+                                <button 
+                                    onClick={() => handleSelectStorage('documents')}
+                                    className="flex items-center justify-between p-5 bg-white border-2 border-transparent hover:border-accent rounded-2xl shadow-sm transition-all group"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-2xl">📄</span>
+                                        <div className="text-left">
+                                            <p className="font-bold text-charcoal">Folder Documents</p>
+                                            <p className="text-xs text-subtle">Internal/Documents/NovTL</p>
+                                        </div>
+                                    </div>
+                                    <span className="opacity-0 group-hover:opacity-100 text-accent transition-opacity">➔</span>
+                                </button>
+                            </div>
+
+                            <p className="text-[10px] text-subtle mt-6 italic">
+                                *Anda bisa mengubah pilihan ini kapan saja di menu Pengaturan.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

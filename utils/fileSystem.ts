@@ -81,10 +81,61 @@ export const fsDelete = async (filename: string): Promise<void> => {
 /**
  * FEATURE: DIRECT DOWNLOAD
  */
+import { Share } from '@capacitor/share';
+
 export const triggerDownload = async (filename: string, blob: Blob) => {
-    // SANITIZE FILENAME: Replace invalid characters with underscore
-    const safeFilename = filename.replace(/[^a-z0-9\u00a0-\uffff\-_.]/gi, '_').replace(/_{2,}/g, '_');
-    
+    // 1. ROBUST SANITIZATION
+    // Remove forbidden characters for Windows/Linux/macOS
+    let safeFilename = filename
+        .replace(/[<>:"/\\|?*]/g, '_') // Forbidden Windows chars
+        .replace(/[\x00-\x1F\x7F]/g, '') // Control characters
+        .replace(/^\.+/, '') // No leading dots
+        .replace(/[ .]+$/, '') // No trailing spaces or dots
+        .trim();
+
+    // Ensure extension is preserved if it was stripped
+    if (!safeFilename.includes('.') && filename.includes('.')) {
+        const ext = filename.split('.').pop();
+        if (ext) safeFilename += `.${ext}`;
+    }
+
+    // Truncate to avoid path length limits (safe limit ~150 chars)
+    if (safeFilename.length > 150) {
+        const parts = safeFilename.split('.');
+        const ext = parts.length > 1 ? `.${parts.pop()}` : '';
+        safeFilename = parts.join('.').slice(0, 140) + ext;
+    }
+
+    // Fallback for empty or invalid names
+    if (!safeFilename || safeFilename === '.epub' || safeFilename === '.txt') {
+        const timestamp = Date.now();
+        const ext = filename.endsWith('.epub') ? '.epub' : '.txt';
+        safeFilename = `novtl_export_${timestamp}${ext}`;
+    }
+
+    // WEB Browser branch - Execute immediately
+    if (!isElectron() && !isCapacitorNative()) {
+        try {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = safeFilename;
+            document.body.appendChild(link);
+            link.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }, 15000); 
+            return;
+        } catch (e) {
+            console.error("Web Download Error:", e);
+            alert("Gagal memicu download di browser.");
+            return;
+        }
+    }
+
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     
@@ -105,47 +156,37 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
         } 
         else if (isCapacitorNative()) {
             try {
-                // TRIK: Gunakan Directory.ExternalStorage tapi arahkan ke path "Download/NovTL/filename"
-                const exportPath = `Download/NovTL/${safeFilename}`; 
+                // Get settings to check preference
+                const { getSettings } = await import('./storage');
+                const settings = await getSettings();
+                
+                let directory = Directory.ExternalStorage;
+                let folderPath = 'Download/NovTL';
+
+                if (settings.storagePreference === 'documents') {
+                    directory = Directory.Documents;
+                    folderPath = 'NovTL';
+                }
+
+                const exportPath = `${folderPath}/${safeFilename}`; 
                 
                 await Filesystem.writeFile({
                     path: exportPath,
                     data: base64data,
-                    directory: Directory.ExternalStorage, // Tembus ke root storage
+                    directory: directory,
                     recursive: true
                 });
-
-                alert(`✅ BERHASIL!\n\n📂 File disimpan di folder:\nDownload/NovTL/${safeFilename}`);
+                
+                alert(`✅ BERHASIL!\n\n📂 File disimpan di:\n${settings.storagePreference === 'documents' ? 'Internal/Documents' : 'Internal/Download'}/NovTL/${safeFilename}`);
 
             } catch (e: any) {
-                console.error("Download Error (Primary)", e);
-                
-                // FALLBACK: Kalau ExternalStorage tetap ditolak, coba ke Documents/NovTL
-                try {
-                    await Filesystem.writeFile({
-                        path: `NovTL/${safeFilename}`,
-                        data: base64data,
-                        directory: Directory.Documents, 
-                        recursive: true
-                    });
-                    alert(`⚠️ Folder Download terkunci sistem.\nFile disimpan di: Internal/Documents/NovTL/${safeFilename}`);
-                } catch (err2: any) {
-                    alert(`❌ Gagal menyimpan file: ${err2.message}`);
-                }
+                console.warn("Download failed", e);
+                alert(`❌ Gagal menyimpan file: ${e.message}\n\nPastikan izin penyimpanan sudah diberikan di pengaturan HP.`);
             }
-        } else {
-            // WEB Browser
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = safeFilename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
         }
     };
 };
+
 
 export const initFileSystem = async () => {
     if (isCapacitorNative()) {

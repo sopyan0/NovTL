@@ -28,6 +28,7 @@ export default function SavedTranslationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloadingEpub, setIsDownloadingEpub] = useState(false);
   const [isDownloadingTxt, setIsDownloadingTxt] = useState(false);
+  const [isDownloadingSingle, setIsDownloadingSingle] = useState(false);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -298,21 +299,35 @@ export default function SavedTranslationsPage() {
 
   const handleDownloadReading = async () => {
     if (currentReadingTranslation) {
-      const blob = new Blob([currentReadingTranslation.translatedText], { type: 'text/plain' });
+      const text = currentReadingTranslation.translatedText || "";
+      if (!text.trim()) {
+          alert("Peringatan: Konten bab ini kosong.");
+      }
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const safeName = sanitizeFilename(currentReadingTranslation.name);
       await triggerDownload(`${safeName}.txt`, blob);
     }
   };
 
   const handleDownloadReadingEpub = async () => {
-    if (!currentReadingTranslation || !activeProject) return;
+    if (!currentReadingTranslation) return;
+    if (!activeProject) {
+        alert("Error: Proyek tidak ditemukan. Silakan pilih proyek kembali.");
+        return;
+    }
+    setIsDownloadingSingle(true);
     try {
         const { generateEpub } = await import('../utils/epubGenerator');
         const blob = await generateEpub(activeProject, [currentReadingTranslation]);
+        if (!blob) throw new Error("Blob generation failed");
+        
         const safeName = sanitizeFilename(currentReadingTranslation.name);
         await triggerDownload(`${safeName}.epub`, blob);
-    } catch (e) {
+    } catch (e: any) {
         console.error("Failed single epub", e);
+        alert(`Gagal membuat EPUB: ${e.message || 'Unknown error'}`);
+    } finally {
+        setIsDownloadingSingle(false);
     }
   };
 
@@ -366,7 +381,14 @@ export default function SavedTranslationsPage() {
                         ) : (
                             <div className="flex items-center gap-2 bg-card/80 p-1 rounded-full border border-border shadow-sm">
                                 <button onClick={() => setIsEditingContent(true)} className="p-2 text-charcoal hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" title="Edit Content">✎</button>
-                                <button onClick={handleDownloadReadingEpub} className="p-2 text-charcoal hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" title="Download EPUB">⤓ EPUB</button>
+                                <button 
+                                    onClick={handleDownloadReadingEpub} 
+                                    disabled={isDownloadingSingle}
+                                    className="p-2 text-charcoal hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors disabled:opacity-50" 
+                                    title="Download EPUB"
+                                >
+                                    {isDownloadingSingle ? '...' : '⤓ EPUB'}
+                                </button>
                                 <button onClick={handleDownloadReading} className="p-2 text-charcoal hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" title="Download TXT">⤓ TXT</button>
                             </div>
                         )}

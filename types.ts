@@ -63,6 +63,7 @@ export interface AppSettings {
   appLanguage: 'id' | 'en'; 
   theme: 'light' | 'dark'; 
   translationMode: 'standard' | 'high_quality'; 
+  storagePreference?: 'downloads' | 'documents'; // NEW: User choice for export
   customModels?: Record<string, string[]>; // NEW: Store user-added models per provider
   version: number; 
 }

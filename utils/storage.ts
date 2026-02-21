@@ -200,3 +200,16 @@ export const countTranslationsByProjectId = async (projectId: string): Promise<n
     const summaries = await getTranslationSummariesByProjectId(projectId);
     return summaries.length;
 };
+
+// --- SETTINGS HELPER (FOR NON-REACT CONTEXT) ---
+export const getSettings = async (): Promise<AppSettings> => {
+    const { DEFAULT_SETTINGS, STORAGE_KEY } = await import('../constants');
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return DEFAULT_SETTINGS;
+    try {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_SETTINGS, ...parsed };
+    } catch {
+        return DEFAULT_SETTINGS;
+    }
+};

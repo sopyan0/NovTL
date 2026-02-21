@@ -602,29 +602,33 @@ export const chatWithAssistantStream = async (
       })).slice(-6);
 
       const ai = new GoogleGenAI({ apiKey: config.apiKey });
-      const model = ai.getGenerativeModel({
+      const chat = ai.chats.create({
         model: config.model,
-        systemInstruction: systemPrompt,
-        tools: [{ functionDeclarations: [glossaryToolGemini, memoryToolGemini, readFullContentToolGemini] }],
-        generationConfig: { temperature: 0.4 }
+        config: {
+          systemInstruction: systemPrompt,
+          tools: [{ functionDeclarations: [glossaryToolGemini, memoryToolGemini, readFullContentToolGemini] }],
+          temperature: 0.4
+        },
+        history: historyContent
       });
 
-      const chat = model.startChat({ history: historyContent });
-      const result = await chat.sendMessageStream(finalUserMessage);
+      const result = await chat.sendMessageStream({ message: finalUserMessage });
 
       let fullText = '';
-      for await (const chunk of result.stream) {
-          const chunkText = chunk.text();
+      let lastFc: any = null;
+
+      for await (const chunk of result) {
+          const chunkText = chunk.text || "";
           if (chunkText) {
               fullText += chunkText;
               onChunk(chunkText);
           }
+          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+              lastFc = chunk.functionCalls[0];
+          }
       }
 
-      const response = await result.response;
-      const fc = response.functionCalls()?.[0];
-      
-      if (fc) return handleToolCall(fc.name, fc.args, settings.activeProjectId, language);
+      if (lastFc && lastFc.name) return handleToolCall(lastFc.name, lastFc.args, settings.activeProjectId, language);
       return { type: 'NONE', message: fullText || (language === 'en' ? "Ready!" : "Siap membantu!") };
 
     } catch (err: any) {
@@ -723,7 +727,7 @@ export const chatWithAssistant = async (
       });
 
       const fc = response.functionCalls?.[0];
-      if (fc) return handleToolCall(fc.name, fc.args, settings.activeProjectId, language);
+      if (fc && fc.name) return handleToolCall(fc.name, fc.args, settings.activeProjectId, language);
       return { type: 'NONE', message: response.text || (language === 'en' ? "Ready!" : "Siap membantu!") };
     } catch (err: any) {
         throw new Error(mapAIError(err));

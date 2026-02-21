@@ -546,6 +546,39 @@ const SettingsPage: React.FC = () => {
         </div>
       </section>
 
+      {/* STORAGE PREFERENCE (NEW) */}
+      <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-accent">
+        <h2 className="text-xl font-serif font-bold text-charcoal pb-2 border-b border-gray-100">📂 Lokasi Penyimpanan</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div 
+                onClick={() => updateSettings({ storagePreference: 'downloads' })}
+                className={`p-6 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 ${settings.storagePreference === 'downloads' ? 'bg-accent/5 border-accent' : 'bg-card border-transparent hover:border-gray-200'}`}
+            >
+                <span className="text-3xl">📥</span>
+                <div>
+                    <p className="font-bold text-charcoal">Folder Download</p>
+                    <p className="text-xs text-subtle">Internal/Download/NovTL</p>
+                </div>
+                {settings.storagePreference === 'downloads' && <span className="ml-auto text-accent">✓</span>}
+            </div>
+
+            <div 
+                onClick={() => updateSettings({ storagePreference: 'documents' })}
+                className={`p-6 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 ${settings.storagePreference === 'documents' ? 'bg-accent/5 border-accent' : 'bg-card border-transparent hover:border-gray-200'}`}
+            >
+                <span className="text-3xl">📄</span>
+                <div>
+                    <p className="font-bold text-charcoal">Folder Documents</p>
+                    <p className="text-xs text-subtle">Internal/Documents/NovTL</p>
+                </div>
+                {settings.storagePreference === 'documents' && <span className="ml-auto text-accent">✓</span>}
+            </div>
+        </div>
+        <p className="text-xs text-subtle italic">
+            *Pilihan ini menentukan di mana file EPUB/TXT akan disimpan saat Anda melakukan ekspor.
+        </p>
+      </section>
+
       {/* ADD MODEL MODAL */}
       {isModelModalOpen && portalRoot && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">

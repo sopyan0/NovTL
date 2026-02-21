@@ -766,7 +766,7 @@ const TranslationInterface: React.FC<TranslationInterfaceProps> = ({ isSidebarCo
           return;
       }
 
-      const updatedGlossary = [...currentGlossary, ...uniqueToAdd];
+      const updatedGlossary = [...currentGlossary, ...uniqueToAdd.map(item => ({ ...item, sourceLanguage: 'auto' }))];
       
       // Optimistic update
       // const updatedProject = { ...activeProject, glossary: updatedGlossary };
