@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Page } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { isCapacitorNative } from '../utils/fileSystem';
+import { isCapacitorNative, pickExportDirectory } from '../utils/fileSystem';
 
 interface DashboardProps {
     onNavigate: (page: Page) => void;
@@ -21,9 +21,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         }
     }, [settings.storagePreference]);
 
-    const handleSelectStorage = (pref: 'downloads' | 'documents') => {
+    const handleSelectStorage = (pref: 'downloads' | 'documents' | 'saf') => {
+        if (pref === 'saf') {
+            handlePickSAF();
+            return;
+        }
         updateSettings({ storagePreference: pref });
         setShowStorageModal(false);
+    };
+
+    const handlePickSAF = async () => {
+        const path = await pickExportDirectory();
+        if (path) {
+            updateSettings({ 
+                storagePreference: 'saf',
+                safTreeUri: path 
+            });
+            setShowStorageModal(false);
+        } else {
+            alert("Gagal memilih folder. Silakan coba lagi atau pilih lokasi lain.");
+        }
     };
 
     const totalProjects = settings.projects.length;
@@ -199,6 +216,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                                         <div className="text-left">
                                             <p className="font-bold text-charcoal">Folder Documents</p>
                                             <p className="text-xs text-subtle">Internal/Documents/NovTL</p>
+                                        </div>
+                                    </div>
+                                    <span className="opacity-0 group-hover:opacity-100 text-accent transition-opacity">➔</span>
+                                </button>
+
+                                <button 
+                                    onClick={() => handleSelectStorage('saf')}
+                                    className="flex items-center justify-between p-5 bg-accent/5 border-2 border-accent/20 hover:border-accent rounded-2xl shadow-sm transition-all group"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-2xl">🛠️</span>
+                                        <div className="text-left">
+                                            <p className="font-bold text-accent">Pilih Folder Sendiri (SAF)</p>
+                                            <p className="text-xs text-subtle">Rekomendasi Android 11+</p>
                                         </div>
                                     </div>
                                     <span className="opacity-0 group-hover:opacity-100 text-accent transition-opacity">➔</span>

@@ -573,6 +573,29 @@ const SettingsPage: React.FC = () => {
                 </div>
                 {settings.storagePreference === 'documents' && <span className="ml-auto text-accent">✓</span>}
             </div>
+
+            <div 
+                onClick={async () => {
+                    const { pickExportDirectory } = await import('../utils/fileSystem');
+                    const path = await pickExportDirectory();
+                    if (path) {
+                        updateSettings({ 
+                            storagePreference: 'saf',
+                            safTreeUri: path 
+                        });
+                    }
+                }}
+                className={`p-6 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 ${settings.storagePreference === 'saf' ? 'bg-accent/5 border-accent' : 'bg-card border-transparent hover:border-gray-200'}`}
+            >
+                <span className="text-3xl">🛠️</span>
+                <div className="flex-grow">
+                    <p className="font-bold text-charcoal">Pilih Folder Sendiri (SAF)</p>
+                    <p className="text-xs text-subtle truncate max-w-[200px]">
+                        {settings.safTreeUri || 'Rekomendasi Android 11+'}
+                    </p>
+                </div>
+                {settings.storagePreference === 'saf' && <span className="ml-auto text-accent">✓</span>}
+            </div>
         </div>
         <p className="text-xs text-subtle italic">
             *Pilihan ini menentukan di mana file EPUB/TXT akan disimpan saat Anda melakukan ekspor.

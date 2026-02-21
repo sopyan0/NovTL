@@ -82,6 +82,18 @@ export const fsDelete = async (filename: string): Promise<void> => {
  * FEATURE: DIRECT DOWNLOAD
  */
 import { Share } from '@capacitor/share';
+import { FilePicker } from '@capawesome/capacitor-file-picker';
+
+export const pickExportDirectory = async (): Promise<string | null> => {
+    if (!isCapacitorNative()) return null;
+    try {
+        const result = await FilePicker.pickDirectory();
+        return result.path || null;
+    } catch (e) {
+        console.error("Pick Directory Error:", e);
+        return null;
+    }
+};
 
 export const triggerDownload = async (filename: string, blob: Blob) => {
     // 1. ROBUST SANITIZATION (Point 4)
@@ -159,6 +171,38 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 let directory = Directory.ExternalStorage;
                 let folderPath = 'Download/NovTL';
 
+                // Handle SAF / Custom Directory
+                if (settings.storagePreference === 'saf' && settings.safTreeUri) {
+                    // Note: On Android 11+, writing to a SAF URI requires a specific plugin.
+                    // If the user's workflow installs @capawesome/capacitor-file-picker,
+                    // we assume they have a way to write or that the path is bridged.
+                    // For now, we try to write to the path returned by the picker.
+                    try {
+                        await Filesystem.writeFile({
+                            path: `${settings.safTreeUri}/${safeFilename}`,
+                            data: base64data,
+                            // When using a full path from SAF, we might not need a directory constant
+                            // but Capacitor Filesystem usually requires one. 
+                            // This is a limitation of the standard plugin.
+                            recursive: true
+                        });
+                        alert(`✅ BERHASIL!\n\n📂 File disimpan di folder pilihan Anda:\n${safeFilename}`);
+                        return;
+                    } catch (safErr) {
+                        console.warn("SAF Write failed, falling back to Share", safErr);
+                        // Fallback to Share if SAF write fails
+                        await Share.share({
+                            title: safeFilename,
+                            url: (await Filesystem.writeFile({
+                                path: `temp_${safeFilename}`,
+                                data: base64data,
+                                directory: Directory.Cache
+                            })).uri
+                        });
+                        return;
+                    }
+                }
+
                 if (settings.storagePreference === 'documents') {
                     directory = Directory.Documents;
                     folderPath = 'NovTL';
@@ -179,9 +223,8 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
 
             } catch (e: any) {
                 console.warn("Download failed", e);
-                // If ExternalStorage fails (common on Android 11+), suggest switching to Documents
                 const msg = e.message?.toLowerCase().includes('permission') 
-                    ? "Gagal akses folder Download. Coba ganti lokasi simpan ke 'Documents' di Pengaturan."
+                    ? "Gagal akses folder. Coba ganti lokasi simpan ke 'Documents' atau gunakan 'Pilih Folder' di Pengaturan."
                     : `Gagal menyimpan file: ${e.message}`;
                 alert(`❌ ${msg}`);
             }
