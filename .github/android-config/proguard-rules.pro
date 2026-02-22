@@ -1,5 +1,2 @@
-# Add project specific ProGuard rules here.
-# By default, the flags in this file are appended to flags specified
-# by Android Gradle plugin
-# You can edit this file to add your own rules.
--keep class io.capawesome.capacitor.plugins.filepicker.** { *; }
+# ProGuard rules for Daniele Rolli's Scoped Storage plugin
+-keep class com.daniele.rolli.plugins.scopestorage.** { *; }
