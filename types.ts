@@ -63,7 +63,7 @@ export interface AppSettings {
   appLanguage: 'id' | 'en'; 
   theme: 'light' | 'dark'; 
   translationMode: 'standard' | 'high_quality'; 
-  storagePreference?: 'downloads' | 'documents' | 'saf'; // NEW: User choice for export
+  storagePreference?: 'downloads' | 'documents' | 'saf' | 'share'; // NEW: User choice for export
   safTreeUri?: string; // NEW: Store the SAF Directory URI
   customModels?: Record<string, string[]>; // NEW: Store user-added models per provider
   version: number; 

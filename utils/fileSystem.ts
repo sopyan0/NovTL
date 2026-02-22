@@ -81,7 +81,7 @@ export const fsDelete = async (filename: string): Promise<void> => {
 /**
  * FEATURE: DIRECT DOWNLOAD
  */
-import { Share } from '@capacitor/share';
+
 import { FilePicker } from '@capawesome/capacitor-file-picker';
 
 export const pickExportDirectory = async (): Promise<string | null> => {
@@ -198,26 +198,18 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 alert(`✅ BERHASIL!\n\n📂 File disimpan di:\n${locationName}/NovTL/${safeFilename}`);
 
             } catch (e: any) {
-                console.warn("Direct write failed, using Share fallback", e);
-                try {
-                    // Save to Cache first so we can share the URI
-                    const tempPath = `NovTL_Export_${Date.now()}_${safeFilename}`;
-                    const writeResult = await Filesystem.writeFile({
-                        path: tempPath,
-                        data: base64data,
-                        directory: Directory.Cache
-                    });
-
-                    await Share.share({
-                        title: safeFilename,
-                        text: `NovTL Export: ${safeFilename}`,
-                        url: writeResult.uri,
-                        dialogTitle: 'Simpan atau Bagikan File'
-                    });
-                } catch (shareErr: any) {
-                    const errorDetail = e.message === "SAF_REDIRECT_TO_SHARE" ? "" : `\n\nDetail: ${e.message}`;
-                    alert(`❌ Gagal menyimpan secara langsung.${errorDetail}\n\nSilakan gunakan menu 'Bagikan' yang muncul setelah ini.`);
+                console.error("File download failed:", e);
+                const isPermissionError = e.message?.toLowerCase().includes('permission');
+                const isSafRedirect = e.message === 'SAF_REDIRECT_TO_SHARE';
+                
+                let errorMessage = `Gagal menyimpan file. Error: ${e.message || 'Unknown'}`;
+                if (isPermissionError) {
+                    errorMessage = "Gagal mendapatkan izin penyimpanan. Pastikan izin telah diberikan di pengaturan aplikasi untuk NovTL.";
+                } else if (isSafRedirect) {
+                    errorMessage = "Folder SAF tidak dapat ditulis secara langsung. Silakan pilih folder lain atau gunakan mode penyimpanan 'Download' atau 'Documents'.";
                 }
+
+                alert(`❌ Gagal Menyimpan File\n\n${errorMessage}`);
             }
         }
     };
