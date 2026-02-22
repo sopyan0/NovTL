@@ -19,19 +19,31 @@ jobs:
       with:
         node-version: 20
 
-    - name: Install Dependencies
+    - name: Install Dependencies & File Picker Plugin
       run: |
         npm install
-        npm install @capawesome/capacitor-file-picker@^5.0.0
+        npm install @capawesome/capacitor-file-picker@5.2.0
 
     - name: Build React App
       run: npm run build
 
-    - name: Sync Capacitor
+    - name: Add Android Platform
+      run: npx cap add android || true
+
+    - name: Copy Custom Android Config
       run: |
-        npx cap add android || true
-        npx cap update android
-        npx cap sync android
+        echo "Copying custom Android configuration files..."
+        cp android/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml.bak
+        cp android/app/build.gradle android/app/build.gradle.bak
+        cp android/app/proguard-rules.pro android/app/proguard-rules.pro.bak
+        
+        # Now copy our committed versions over the generated ones
+        cp -v ./android/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+        cp -v ./android/app/build.gradle android/app/build.gradle
+        cp -v ./android/app/proguard-rules.pro android/app/proguard-rules.pro
+
+    - name: Sync Capacitor
+      run: npx cap sync android --deployment
 
     # --- LANGKAH SAKTI: INJECT PERMISSIONS (VERSI STABIL) ---
     - name: Inject Android Permissions & Legacy Storage
@@ -72,3 +84,4 @@ jobs:
       with:
         name: NovTL-Android-APK
         path: android/app/build/outputs/apk/debug/app-debug.apk
+
