@@ -22,7 +22,7 @@ jobs:
     - name: Install Dependencies & Scoped Storage Plugin
       run: |
         npm install
-        npm install @daniele-rolli/capacitor-scoped-storage@^1.0.3
+        npm install @daniele-rolli/capacitor-scoped-storage@^0.0.2
 
     - name: Build React App
       run: npm run build
