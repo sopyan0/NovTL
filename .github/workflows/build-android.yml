@@ -32,15 +32,11 @@ jobs:
 
     - name: Copy Custom Android Config
       run: |
-        echo "Copying custom Android configuration files..."
-        cp android/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml.bak
-        cp android/app/build.gradle android/app/build.gradle.bak
-        cp android/app/proguard-rules.pro android/app/proguard-rules.pro.bak
-        
-        # Now copy our committed versions over the generated ones
-        cp -v ./android/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-        cp -v ./android/app/build.gradle android/app/build.gradle
-        cp -v ./android/app/proguard-rules.pro android/app/proguard-rules.pro
+        echo "Copying custom Android configuration files from .github/android-config..."
+        # Copy our committed versions over the generated ones
+        cp -v ./.github/android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+        cp -v ./.github/android-config/build.gradle android/app/build.gradle
+        cp -v ./.github/android-config/proguard-rules.pro android/app/proguard-rules.pro
 
     - name: Sync Capacitor
       run: npx cap sync android --deployment
@@ -84,3 +80,4 @@ jobs:
       with:
         name: NovTL-Android-APK
         path: android/app/build/outputs/apk/debug/app-debug.apk
+
