@@ -90,15 +90,17 @@ export const generateEpub = async (project: NovelProject, chapters: SavedTransla
 
     // Add Chapters
     chapters.forEach((chapter, index) => {
+      if (!chapter || !chapter.translatedText) return;
+      
       const content = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <title>${escapeXml(chapter.name)}</title>
+  <title>${escapeXml(chapter.name || `Chapter ${index + 1}`)}</title>
   <link rel="stylesheet" type="text/css" href="styles.css"/>
 </head>
 <body>
-  <h2>${escapeXml(chapter.name)}</h2>
+  <h2>${escapeXml(chapter.name || `Chapter ${index + 1}`)}</h2>
   ${textToHtml(chapter.translatedText)}
 </body>
 </html>`;
@@ -141,7 +143,7 @@ export const generateEpub = async (project: NovelProject, chapters: SavedTransla
       `<navPoint id="navPoint-0" playOrder="0"><navLabel><text>Cover</text></navLabel><content src="title.xhtml"/></navPoint>`,
       ...chapters.map((ch, i) => `
       <navPoint id="navPoint-${i + 1}" playOrder="${i + 1}">
-        <navLabel><text>${escapeXml(ch.name)}</text></navLabel>
+        <navLabel><text>${escapeXml(ch.name || `Chapter ${i + 1}`)}</text></navLabel>
         <content src="chapter-${i + 1}.xhtml"/>
       </navPoint>`)
     ].join('\n');

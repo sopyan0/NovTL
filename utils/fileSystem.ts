@@ -87,42 +87,41 @@ import { FilePicker } from '@capawesome/capacitor-file-picker';
 export const pickExportDirectory = async (): Promise<string | null> => {
     if (!isCapacitorNative()) return null;
     try {
+        console.log("Opening Directory Picker...");
         const result = await FilePicker.pickDirectory();
+        console.log("Picker Result:", result);
         return result.path || null;
-    } catch (e) {
+    } catch (e: any) {
         console.error("Pick Directory Error:", e);
+        alert(`Gagal membuka pemilih folder: ${e.message || 'Unknown Error'}`);
         return null;
     }
 };
 
 export const triggerDownload = async (filename: string, blob: Blob) => {
     // 1. ROBUST SANITIZATION (Point 4)
-    // Remove forbidden characters: < > : " / \ | ? *
     let safeFilename = filename
         .replace(/[<>:"/\\|?*]/g, '_') 
-        .replace(/[\x00-\x1F\x7F]/g, '') // Control characters
-        .replace(/^\.+/, '') // No leading dots
-        .replace(/[ .]+$/, '') // No trailing spaces or dots
+        .replace(/[\x00-\x1F\x7F]/g, '') 
+        .replace(/^\.+/, '') 
+        .replace(/[ .]+$/, '') 
         .trim();
 
-    // Ensure extension is preserved
     const ext = filename.includes('.') ? `.${filename.split('.').pop()}` : '';
     if (!safeFilename.endsWith(ext) && ext !== '.') {
         safeFilename += ext;
     }
 
-    // Truncate to avoid path length limits (safe limit ~150 chars)
     if (safeFilename.length > 150) {
         const namePart = safeFilename.replace(ext, '');
         safeFilename = namePart.slice(0, 140) + ext;
     }
 
-    // Fallback for empty or invalid names
     if (!safeFilename || safeFilename === '.epub' || safeFilename === '.txt') {
         safeFilename = `novtl_export_${Date.now()}${ext || '.txt'}`;
     }
 
-    // 2. WEB FALLBACK (Point 5)
+    // 2. WEB FALLBACK
     if (!isElectron() && !isCapacitorNative()) {
         try {
             const url = URL.createObjectURL(blob);
@@ -131,14 +130,12 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
             link.download = safeFilename;
             document.body.appendChild(link);
             link.click();
-            
             setTimeout(() => {
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
             }, 15000); 
             return;
         } catch (e) {
-            console.error("Web Download Error:", e);
             alert("Gagal memicu download di browser.");
             return;
         }
@@ -148,7 +145,12 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
     reader.readAsDataURL(blob);
     
     reader.onloadend = async () => {
-        const base64data = (reader.result as string).split(',')[1];
+        const result = reader.result as string;
+        if (!result || !result.includes(',')) {
+            alert("❌ Gagal memproses data file (Base64 error).");
+            return;
+        }
+        const base64data = result.split(',')[1];
         
         if (isElectron()) {
             try {
@@ -158,59 +160,33 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 } else {
                     alert(`❌ Gagal menyimpan: ${res.error}`);
                 }
-            } catch (e) {
-                alert("Error saat menyimpan di Desktop.");
+            } catch (e: any) {
+                alert(`❌ Error Desktop: ${e.message}`);
             }
         } 
-        // 3. CAPACITOR EXPORT (Point 2)
         else if (isCapacitorNative()) {
             try {
                 const { getSettings } = await import('./storage');
                 const settings = await getSettings();
                 
+                // --- STRATEGY: TRY DIRECT WRITE, FALLBACK TO SHARE ---
                 let directory = Directory.ExternalStorage;
                 let folderPath = 'Download/NovTL';
-
-                // Handle SAF / Custom Directory
-                if (settings.storagePreference === 'saf' && settings.safTreeUri) {
-                    // Note: On Android 11+, writing to a SAF URI requires a specific plugin.
-                    // If the user's workflow installs @capawesome/capacitor-file-picker,
-                    // we assume they have a way to write or that the path is bridged.
-                    // For now, we try to write to the path returned by the picker.
-                    try {
-                        await Filesystem.writeFile({
-                            path: `${settings.safTreeUri}/${safeFilename}`,
-                            data: base64data,
-                            // When using a full path from SAF, we might not need a directory constant
-                            // but Capacitor Filesystem usually requires one. 
-                            // This is a limitation of the standard plugin.
-                            recursive: true
-                        });
-                        alert(`✅ BERHASIL!\n\n📂 File disimpan di folder pilihan Anda:\n${safeFilename}`);
-                        return;
-                    } catch (safErr) {
-                        console.warn("SAF Write failed, falling back to Share", safErr);
-                        // Fallback to Share if SAF write fails
-                        await Share.share({
-                            title: safeFilename,
-                            url: (await Filesystem.writeFile({
-                                path: `temp_${safeFilename}`,
-                                data: base64data,
-                                directory: Directory.Cache
-                            })).uri
-                        });
-                        return;
-                    }
-                }
 
                 if (settings.storagePreference === 'documents') {
                     directory = Directory.Documents;
                     folderPath = 'NovTL';
                 }
 
+                // SAF Handling
+                if (settings.storagePreference === 'saf' && settings.safTreeUri) {
+                    // Standard Filesystem plugin doesn't support SAF URIs well for writing
+                    // We force Share fallback for SAF to ensure it works
+                    throw new Error("SAF_REDIRECT_TO_SHARE"); 
+                }
+
                 const exportPath = `${folderPath}/${safeFilename}`; 
                 
-                // Note: writeFile with recursive: true handles folder creation (Point 3)
                 await Filesystem.writeFile({
                     path: exportPath,
                     data: base64data,
@@ -222,11 +198,26 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                 alert(`✅ BERHASIL!\n\n📂 File disimpan di:\n${locationName}/NovTL/${safeFilename}`);
 
             } catch (e: any) {
-                console.warn("Download failed", e);
-                const msg = e.message?.toLowerCase().includes('permission') 
-                    ? "Gagal akses folder. Coba ganti lokasi simpan ke 'Documents' atau gunakan 'Pilih Folder' di Pengaturan."
-                    : `Gagal menyimpan file: ${e.message}`;
-                alert(`❌ ${msg}`);
+                console.warn("Direct write failed, using Share fallback", e);
+                try {
+                    // Save to Cache first so we can share the URI
+                    const tempPath = `NovTL_Export_${Date.now()}_${safeFilename}`;
+                    const writeResult = await Filesystem.writeFile({
+                        path: tempPath,
+                        data: base64data,
+                        directory: Directory.Cache
+                    });
+
+                    await Share.share({
+                        title: safeFilename,
+                        text: `NovTL Export: ${safeFilename}`,
+                        url: writeResult.uri,
+                        dialogTitle: 'Simpan atau Bagikan File'
+                    });
+                } catch (shareErr: any) {
+                    const errorDetail = e.message === "SAF_REDIRECT_TO_SHARE" ? "" : `\n\nDetail: ${e.message}`;
+                    alert(`❌ Gagal menyimpan secara langsung.${errorDetail}\n\nSilakan gunakan menu 'Bagikan' yang muncul setelah ini.`);
+                }
             }
         }
     };
@@ -236,13 +227,18 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
 export const initFileSystem = async () => {
     if (isCapacitorNative()) {
         try {
+            // Request multiple permissions for Android 11+
             const perm = await Filesystem.checkPermissions();
             if (perm.publicStorage !== 'granted') {
                 await Filesystem.requestPermissions();
             }
+            
+            // Also check for media permissions if available
+            if ((Filesystem as any).requestMediaLibraryPermissions) {
+                await (Filesystem as any).requestMediaLibraryPermissions();
+            }
 
             // Init Folder Kerja (Private/App Scope) di Documents (Point 3)
-            // JANGAN MEMBUAT FOLDER DI EXTERNAL STORAGE SAAT INIT
             await Filesystem.mkdir({ path: 'NovTL', directory: Directory.Documents, recursive: true });
         } catch (e) {
             console.warn("Init FS Warning:", e);

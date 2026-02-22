@@ -214,8 +214,8 @@ export default function SavedTranslationsPage() {
         const safeProjectName = sanitizeFilename(projectName);
         const filename = `${safeProjectName}_Export.txt`;
         await triggerDownload(filename, blob);
-    } catch (e) {
-        alert("Gagal menyiapkan download.");
+    } catch (e: any) {
+        alert(`Gagal menyiapkan download: ${e.message || 'Unknown error'}`);
     } finally {
         setIsDownloadingTxt(false);
     }
@@ -231,8 +231,8 @@ export default function SavedTranslationsPage() {
         const safeProjectName = sanitizeFilename(projectName);
         const filename = `${safeProjectName}.epub`;
         await triggerDownload(filename, blob);
-    } catch (e) {
-        alert("Gagal membuat EPUB.");
+    } catch (e: any) {
+        alert(`Gagal membuat EPUB: ${e.message || 'Unknown error'}`);
     } finally {
         setIsDownloadingEpub(false);
     }
