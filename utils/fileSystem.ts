@@ -85,15 +85,38 @@ export const fsDelete = async (filename: string): Promise<void> => {
 import { FilePicker } from '@capawesome/capacitor-file-picker';
 
 export const pickExportDirectory = async (): Promise<string | null> => {
-    if (!isCapacitorNative()) return null;
+    if (!isCapacitorNative()) {
+        console.log("pickExportDirectory: Not a native platform. Aborting.");
+        return null;
+    }
+
     try {
-        console.log("Opening Directory Picker...");
-        const result = await (FilePicker as any).pickDirectory();
-        console.log("Picker Result:", result);
-        return result.path || null;
+        console.log("pickExportDirectory: Attempting to check and request permissions...");
+        const perm = await Filesystem.checkPermissions();
+        if (perm.publicStorage !== 'granted') {
+            console.log("pickExportDirectory: publicStorage permission not granted. Requesting...");
+            const requestResult = await Filesystem.requestPermissions();
+            if (requestResult.publicStorage !== 'granted') {
+                console.error("pickExportDirectory: Permission denied after request.");
+                alert("Izin akses penyimpanan ditolak. Fitur ini tidak dapat digunakan tanpa izin.");
+                return null;
+            }
+            console.log("pickExportDirectory: Permission granted after request.");
+        }
+
+        console.log("pickExportDirectory: Permissions are granted. Opening Directory Picker...");
+        const result = await FilePicker.pickDirectory();
+        console.log("pickExportDirectory: Picker result received:", JSON.stringify(result));
+
+        if (!result || !result.path) {
+            console.warn("pickExportDirectory: Picker returned no path.");
+            return null;
+        }
+
+        return result.path;
     } catch (e: any) {
-        console.error("Pick Directory Error:", e);
-        alert(`Gagal membuka pemilih folder: ${e.message || 'Unknown Error'}`);
+        console.error("pickExportDirectory: An error occurred.", JSON.stringify(e));
+        alert(`Gagal membuka pemilih folder: ${e.message || 'Error tidak diketahui'}`);
         return null;
     }
 };
