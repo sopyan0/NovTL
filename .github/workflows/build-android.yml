@@ -33,9 +33,15 @@ jobs:
     - name: Sync Capacitor
       run: npx cap sync android --deployment
 
-    - name: Patch Gradle Files for SDK 34
+    - name: Patch Gradle Files for SDK 34 & AGP 8.2.0
       run: |
-        # Update compileSdk and targetSdk in app's build.gradle
+        # 1. Update Android Gradle Plugin version in the root build.gradle
+        ROOT_GRADLE_PATH="android/build.gradle"
+        # Capacitor 5 default is 8.0.0, we need a newer one for SDK 34
+        sed -i 's/com.android.tools.build:gradle:8.0.0/com.android.tools.build:gradle:8.2.0/g' $ROOT_GRADLE_PATH
+        echo "✅ Patched AGP version to 8.2.0 in $ROOT_GRADLE_PATH"
+
+        # 2. Update compileSdk and targetSdk in the app's build.gradle
         APP_GRADLE_PATH="android/app/build.gradle"
         sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' $APP_GRADLE_PATH
         sed -i 's/targetSdkVersion 33/targetSdkVersion 34/g' $APP_GRADLE_PATH
