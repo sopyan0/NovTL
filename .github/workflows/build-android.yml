@@ -19,10 +19,10 @@ jobs:
       with:
         node-version: 20
 
-    - name: Install Dependencies & File Picker Plugin
+    - name: Install Dependencies & Scoped Storage Plugin
       run: |
         npm install
-        npm install @capawesome/capacitor-file-picker@5.2.0
+        npm install @daniele-rolli/capacitor-scoped-storage@^1.0.3
 
     - name: Build React App
       run: npm run build
@@ -48,20 +48,7 @@ jobs:
         PROGUARD_PATH="android/app/proguard-rules.pro"
         cat ./.github/android-config/proguard-rules.pro >> $PROGUARD_PATH
         echo "✅ Appended custom ProGuard rules."
-    - name: Inject Android Permissions & Legacy Storage
-      run: |
-        MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-        
-        # 1. Tambahkan izin tepat di bawah tag <manifest>
-        sed -i '/<manifest/a \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST_PATH
-        
-        # 2. Tambahkan requestLegacyExternalStorage ke tag <application> 
-        # Gunakan pengecekan agar tidak duplikat jika sudah ada
-        if ! grep -q "android:requestLegacyExternalStorage" "$MANIFEST_PATH"; then
-          sed -i 's/<application/<application android:requestLegacyExternalStorage="true"/g' $MANIFEST_PATH
-        fi
-        
-        echo "✅ Permissions injected to AndroidManifest.xml"
+
 
     - name: Generate App Icons
       run: |
