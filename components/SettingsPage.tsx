@@ -260,24 +260,6 @@ const SettingsPage: React.FC = () => {
       reader.readAsText(file);
   };
 
-  const handleShareBackup = async () => {
-    try {
-      const backupData = {
-        settings: { ...settings, projects: [] }, // Don't export projects array in top-level settings
-        projects: settings.projects,
-        version: 1,
-        timestamp: new Date().toISOString(),
-        type: 'NOVTL_FULL_BACKUP',
-      };
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-      const filename = `NovTL_Backup_${new Date().toISOString().split('T')[0]}.json`;
-      // This will use the Share fallback on Capacitor, which is what we want
-      await triggerDownload(filename, blob);
-    } catch (e: any) {
-      alert(`Gagal membagikan backup: ${e.message}`);
-    }
-  };
-
   const filteredGlossary = activeProject.glossary.filter(item => 
     item.original.toLowerCase().includes(glossarySearchTerm.toLowerCase()) || 
     item.translated.toLowerCase().includes(glossarySearchTerm.toLowerCase())
@@ -496,13 +478,6 @@ const SettingsPage: React.FC = () => {
                  </div>
                  <span className="text-2xl">📤</span>
              </button>
-            <button onClick={handleShareBackup} className="flex items-center justify-between p-4 bg-indigo-500 text-white rounded-2xl border border-indigo-600 shadow-sm hover:shadow-md hover:bg-indigo-600 transition-all group">
-                 <div className="text-left">
-                     <p className="font-bold">Bagikan Backup (Share)</p>
-                     <p className="text-xs opacity-80">Gunakan dialog sistem untuk menyimpan.</p>
-                 </div>
-                 <span className="text-2xl">🔗</span>
-             </button>
              <button onClick={handleImportClick} className="flex items-center justify-between p-4 bg-card rounded-2xl border border-border shadow-sm hover:shadow-md transition-all group">
                  <div className="text-left">
                      <p className="font-bold text-charcoal">{t('settings.storage.import')}</p>
@@ -575,16 +550,6 @@ const SettingsPage: React.FC = () => {
       <section className="glass-card p-6 md:p-8 rounded-3xl shadow-soft space-y-6 border-l-4 border-accent">
         <div className="flex justify-between items-center pb-2 border-b border-gray-100">
             <h2 className="text-xl font-serif font-bold text-charcoal">📂 Lokasi Penyimpanan</h2>
-            <button 
-                onClick={async () => {
-                    const { initFileSystem } = await import('../utils/fileSystem');
-                    await initFileSystem();
-                    alert("Izin penyimpanan telah diminta. Silakan cek pengaturan HP jika masih bermasalah.");
-                }}
-                className="text-[10px] font-bold text-accent hover:underline"
-            >
-                Minta Izin Manual
-            </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div 

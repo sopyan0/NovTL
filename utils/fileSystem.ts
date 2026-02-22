@@ -88,7 +88,7 @@ export const pickExportDirectory = async (): Promise<string | null> => {
     if (!isCapacitorNative()) return null;
     try {
         console.log("Opening Directory Picker...");
-        const result = await FilePicker.pickDirectory();
+        const result = await (FilePicker as any).pickDirectory();
         console.log("Picker Result:", result);
         return result.path || null;
     } catch (e: any) {
