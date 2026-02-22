@@ -33,23 +33,23 @@ jobs:
     - name: Sync Capacitor
       run: npx cap sync android --deployment
 
-    - name: Patch Gradle Files for SDK 34, AGP 8.2.0 & Gradle 8.2
+    - name: Patch Gradle Files (Robust Version)
       run: |
-        # 1. Update Gradle Wrapper to a version compatible with AGP 8.2.0
+        # 1. Update Gradle Wrapper to 8.2 (handles any 8.x version)
         WRAPPER_PROPS_PATH="android/gradle/wrapper/gradle-wrapper.properties"
-        sed -i 's/gradle-8.0.2-all.zip/gradle-8.2-all.zip/' $WRAPPER_PROPS_PATH
-        echo "✅ Patched Gradle Wrapper to 8.2 in $WRAPPER_PROPS_PATH"
+        sed -i -E 's/gradle-[0-9.]+-all\.zip/gradle-8.2-all.zip/' $WRAPPER_PROPS_PATH
+        echo "✅ Patched Gradle Wrapper to 8.2"
 
-        # 2. Update Android Gradle Plugin version in the root build.gradle
+        # 2. Update Android Gradle Plugin to 8.2.0 (handles any 8.x version)
         ROOT_GRADLE_PATH="android/build.gradle"
-        sed -i 's/com.android.tools.build:gradle:8.0.0/com.android.tools.build:gradle:8.2.0/g' $ROOT_GRADLE_PATH
-        echo "✅ Patched AGP version to 8.2.0 in $ROOT_GRADLE_PATH"
+        sed -i -E "s/com\.android\.tools\.build:gradle:[0-9.]+/com.android.tools.build:gradle:8.2.0/g" $ROOT_GRADLE_PATH
+        echo "✅ Patched AGP to 8.2.0"
 
-        # 3. Update compileSdk and targetSdk in the app's build.gradle
+        # 3. Update SDK versions to 34 (handles whitespace variations)
         APP_GRADLE_PATH="android/app/build.gradle"
-        sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' $APP_GRADLE_PATH
-        sed -i 's/targetSdkVersion 33/targetSdkVersion 34/g' $APP_GRADLE_PATH
-        echo "✅ Patched compileSdk and targetSdk to 34 in $APP_GRADLE_PATH"
+        sed -i -E 's/compileSdkVersion\s*=\s*33/compileSdkVersion = 34/' $APP_GRADLE_PATH
+        sed -i -E 's/targetSdkVersion\s*=\s*33/targetSdkVersion = 34/' $APP_GRADLE_PATH
+        echo "✅ Patched SDK versions to 34"
 
     - name: Inject Android Permissions & ProGuard Rules
       run: |
