@@ -33,6 +33,14 @@ jobs:
     - name: Sync Capacitor
       run: npx cap sync android --deployment
 
+    - name: Patch Gradle Files for SDK 34
+      run: |
+        # Update compileSdk and targetSdk in app's build.gradle
+        APP_GRADLE_PATH="android/app/build.gradle"
+        sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' $APP_GRADLE_PATH
+        sed -i 's/targetSdkVersion 33/targetSdkVersion 34/g' $APP_GRADLE_PATH
+        echo "✅ Patched compileSdk and targetSdk to 34 in $APP_GRADLE_PATH"
+
     - name: Inject Android Permissions & ProGuard Rules
       run: |
         # 1. Inject requestLegacyExternalStorage into the generated AndroidManifest.xml
