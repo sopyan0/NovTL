@@ -82,41 +82,17 @@ export const fsDelete = async (filename: string): Promise<void> => {
  * FEATURE: DIRECT DOWNLOAD
  */
 
-import { FilePicker } from '@capawesome/capacitor-file-picker';
+import { ScopedStorage } from '@daniele-rolli/capacitor-scoped-storage';
 
 export const pickExportDirectory = async (): Promise<string | null> => {
-    if (!isCapacitorNative()) {
-        console.log("pickExportDirectory: Not a native platform. Aborting.");
-        return null;
-    }
-
+    if (!isCapacitorNative()) return null;
     try {
-        console.log("pickExportDirectory: Attempting to check and request permissions...");
-        const perm = await Filesystem.checkPermissions();
-        if (perm.publicStorage !== 'granted') {
-            console.log("pickExportDirectory: publicStorage permission not granted. Requesting...");
-            const requestResult = await Filesystem.requestPermissions();
-            if (requestResult.publicStorage !== 'granted') {
-                console.error("pickExportDirectory: Permission denied after request.");
-                alert("Izin akses penyimpanan ditolak. Fitur ini tidak dapat digunakan tanpa izin.");
-                return null;
-            }
-            console.log("pickExportDirectory: Permission granted after request.");
-        }
-
-        console.log("pickExportDirectory: Permissions are granted. Opening Directory Picker...");
-        const result = await FilePicker.pickDirectory();
-        console.log("pickExportDirectory: Picker result received:", JSON.stringify(result));
-
-        if (!result || !result.path) {
-            console.warn("pickExportDirectory: Picker returned no path.");
-            return null;
-        }
-
-        return result.path;
+        // This opens the SAF folder picker
+        const result = await ScopedStorage.pickFolder();
+        return result.uri;
     } catch (e: any) {
-        console.error("pickExportDirectory: An error occurred.", JSON.stringify(e));
-        alert(`Gagal membuka pemilih folder: ${e.message || 'Error tidak diketahui'}`);
+        console.error("SAF pickFolder Error:", e);
+        alert(`Gagal memilih folder: ${e.message || 'Unknown Error'}`);
         return null;
     }
 };
@@ -201,38 +177,35 @@ export const triggerDownload = async (filename: string, blob: Blob) => {
                     folderPath = 'NovTL';
                 }
 
-                // SAF Handling
-                if (settings.storagePreference === 'saf' && settings.safTreeUri) {
-                    // Standard Filesystem plugin doesn't support SAF URIs well for writing
-                    // We force Share fallback for SAF to ensure it works
-                    throw new Error("SAF_REDIRECT_TO_SHARE"); 
+                // --- NEW SAF-NATIVE WRITING LOGIC ---
+                if (settings.storagePreference === 'saf') {
+                    if (!settings.safTreeUri) {
+                        throw new Error("Mode SAF dipilih, tapi tidak ada folder yang diotorisasi. Silakan pilih folder di Pengaturan.");
+                    }
+                    await ScopedStorage.writeFile({
+                        uri: settings.safTreeUri,
+                        filename: safeFilename,
+                        data: base64data,
+                        recursive: true,
+                    });
+                    alert(`✅ BERHASIL!\n\n📂 File disimpan di folder SAF yang Anda pilih.`);
+                    return; // Exit after successful SAF write
                 }
 
-                const exportPath = `${folderPath}/${safeFilename}`; 
-                
+                // --- Fallback for 'documents' or 'download' ---
+                const exportPath = `${folderPath}/${safeFilename}`;
                 await Filesystem.writeFile({
                     path: exportPath,
                     data: base64data,
                     directory: directory,
                     recursive: true
                 });
-                
                 const locationName = settings.storagePreference === 'documents' ? 'Documents' : 'Download';
                 alert(`✅ BERHASIL!\n\n📂 File disimpan di:\n${locationName}/NovTL/${safeFilename}`);
 
             } catch (e: any) {
                 console.error("File download failed:", e);
-                const isPermissionError = e.message?.toLowerCase().includes('permission');
-                const isSafRedirect = e.message === 'SAF_REDIRECT_TO_SHARE';
-                
-                let errorMessage = `Gagal menyimpan file. Error: ${e.message || 'Unknown'}`;
-                if (isPermissionError) {
-                    errorMessage = "Gagal mendapatkan izin penyimpanan. Pastikan izin telah diberikan di pengaturan aplikasi untuk NovTL.";
-                } else if (isSafRedirect) {
-                    errorMessage = "Folder SAF tidak dapat ditulis secara langsung. Silakan pilih folder lain atau gunakan mode penyimpanan 'Download' atau 'Documents'.";
-                }
-
-                alert(`❌ Gagal Menyimpan File\n\n${errorMessage}`);
+                alert(`❌ Gagal Menyimpan File\n\n${e.message || 'Unknown Error'}`);
             }
         }
     };
