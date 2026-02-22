@@ -30,18 +30,24 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android || true
 
-    - name: Copy Custom Android Config
-      run: |
-        echo "Copying custom Android configuration files from .github/android-config..."
-        # Copy our committed versions over the generated ones
-        cp -v ./.github/android-config/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-        cp -v ./.github/android-config/build.gradle android/app/build.gradle
-        cp -v ./.github/android-config/proguard-rules.pro android/app/proguard-rules.pro
-
     - name: Sync Capacitor
       run: npx cap sync android --deployment
 
-    # --- LANGKAH SAKTI: INJECT PERMISSIONS (VERSI STABIL) ---
+    - name: Inject Android Permissions & ProGuard Rules
+      run: |
+        # 1. Inject requestLegacyExternalStorage into the generated AndroidManifest.xml
+        MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+        if ! grep -q "android:requestLegacyExternalStorage" "$MANIFEST_PATH"; then
+          sed -i 's/<application/& android:requestLegacyExternalStorage="true"/' "$MANIFEST_PATH"
+          echo "✅ Injected requestLegacyExternalStorage=true to AndroidManifest.xml"
+        else
+          echo "☑️ requestLegacyExternalStorage already exists in AndroidManifest.xml"
+        fi
+
+        # 2. Append our custom ProGuard rules
+        PROGUARD_PATH="android/app/proguard-rules.pro"
+        cat ./.github/android-config/proguard-rules.pro >> $PROGUARD_PATH
+        echo "✅ Appended custom ProGuard rules."
     - name: Inject Android Permissions & Legacy Storage
       run: |
         MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
@@ -80,3 +86,4 @@ jobs:
       with:
         name: NovTL-Android-APK
         path: android/app/build/outputs/apk/debug/app-debug.apk
+
