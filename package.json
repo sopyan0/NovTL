@@ -20,7 +20,7 @@
     "@capacitor/core": "^5.7.0",
     "@capacitor/filesystem": "^5.2.0",
     "@capacitor/share": "^5.0.0",
-    "@daniele-rolli/capacitor-scoped-storage": "^1.0.3",
+    "@daniele-rolli/capacitor-scoped-storage": "^0.0.2",
     "@google/genai": "^1.35.0",
     "jeep-sqlite": "^2.5.6",
     "jszip": "^3.10.1",
