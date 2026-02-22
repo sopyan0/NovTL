@@ -20,7 +20,9 @@ jobs:
         node-version: 20
 
     - name: Install Dependencies
-      run: npm install
+      run: |
+        npm install
+        npm install @capawesome/capacitor-file-picker@^5.0.0
 
     - name: Build React App
       run: npm run build
@@ -28,6 +30,7 @@ jobs:
     - name: Sync Capacitor
       run: |
         npx cap add android || true
+        npx cap update android
         npx cap sync android
 
     # --- LANGKAH SAKTI: INJECT PERMISSIONS (VERSI STABIL) ---
@@ -69,3 +72,4 @@ jobs:
       with:
         name: NovTL-Android-APK
         path: android/app/build/outputs/apk/debug/app-debug.apk
+
