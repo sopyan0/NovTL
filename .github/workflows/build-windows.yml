@@ -22,7 +22,7 @@ jobs:
 
     - name: Install Dependencies
       # Menggunakan npm install biasa agar otomatis generate lockfile di server
-      run: npm install
+      run: npm install --legacy-peer-deps
 
     - name: Build React App
       run: npm run build
