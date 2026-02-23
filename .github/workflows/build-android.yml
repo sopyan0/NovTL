@@ -27,8 +27,38 @@ jobs:
     - name: Build React App
       run: npm run build
 
-    - name: Add Android Platform
-      run: npx cap add android || true
+    - name: Setup Android Platform (Auto-Fix)
+      run: |
+        # Check if the platform is properly initialized (Manifest exists)
+        if [ ! -f "android/app/src/main/AndroidManifest.xml" ]; then
+          echo "⚠️ Android platform incomplete. Regenerating..."
+          
+          # 1. Backup custom configs (SDK 34 settings) if they exist
+          mkdir -p /tmp/android-config
+          [ -f "android/variables.gradle" ] && cp android/variables.gradle /tmp/android-config/
+          [ -f "android/build.gradle" ] && cp android/build.gradle /tmp/android-config/
+          # Backup gradle-wrapper.properties using --parents to preserve path structure
+          [ -f "android/gradle/wrapper/gradle-wrapper.properties" ] && cp --parents android/gradle/wrapper/gradle-wrapper.properties /tmp/android-config/ || true
+
+          # 2. Clean android directory
+          rm -rf android
+
+          # 3. Add android platform (generates fresh structure with defaults)
+          npx cap add android
+
+          # 4. Restore custom configs (overwriting defaults with SDK 34 versions)
+          [ -f "/tmp/android-config/variables.gradle" ] && cp /tmp/android-config/variables.gradle android/
+          [ -f "/tmp/android-config/build.gradle" ] && cp /tmp/android-config/build.gradle android/
+          
+          # Restore gradle wrapper if backed up
+          if [ -d "/tmp/android-config/android/gradle/wrapper" ]; then
+             cp -r /tmp/android-config/android/gradle/wrapper android/gradle/
+          fi
+          
+          echo "✅ Android platform regenerated with SDK 34 configs."
+        else
+          echo "✅ Android platform is complete."
+        fi
 
     - name: Sync Capacitor
       run: npx cap sync android --deployment
